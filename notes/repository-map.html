@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DeerFlow 2.0 · Repository Map</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-soft: #151922;
+    --bg-card: #191e28;
+    --border: #262c38;
+    --border-soft: #1f2530;
+    --fg: #e6e9ef;
+    --fg-dim: #9aa4b5;
+    --fg-faint: #6b7484;
+    --accent: #6ea8fe;
+    --accent-2: #7ee0c0;
+    --warn: #f5c465;
+    --danger: #f28b82;
+    --code-bg: #12161e;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff;
+      --bg-soft: #f6f7f9;
+      --bg-card: #ffffff;
+      --border: #e2e5ea;
+      --border-soft: #eceff3;
+      --fg: #1c2028;
+      --fg-dim: #5b6472;
+      --fg-faint: #8b93a1;
+      --accent: #2563eb;
+      --accent-2: #0f9d76;
+      --warn: #a16207;
+      --danger: #c0392b;
+      --code-bg: #f5f6f8;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout { display: flex; max-width: 1400px; margin: 0 auto; }
+
+  /* Sidebar */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    width: 250px;
+    flex: 0 0 250px;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 18px 40px 24px;
+    border-right: 1px solid var(--border-soft);
+  }
+  nav.toc .brand {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: .2px;
+    margin-bottom: 4px;
+  }
+  nav.toc .brand span { color: var(--accent); }
+  nav.toc .sub { font-size: 12px; color: var(--fg-faint); margin-bottom: 20px; }
+  nav.toc ol { list-style: none; padding-left: 0; margin: 0; counter-reset: sec; }
+  nav.toc li { margin: 1px 0; }
+  nav.toc a {
+    display: block;
+    padding: 5px 10px;
+    border-radius: 6px;
+    color: var(--fg-dim);
+    text-decoration: none;
+    font-size: 13.5px;
+  }
+  nav.toc a:hover { background: var(--bg-soft); color: var(--fg); }
+  nav.toc a .num {
+    display: inline-block;
+    width: 20px;
+    color: var(--fg-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  nav.toc .group {
+    margin-top: 16px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--fg-faint);
+    padding-left: 10px;
+  }
+
+  /* Main */
+  main { flex: 1 1 auto; min-width: 0; padding: 40px 44px 120px; }
+  header.hero { border-bottom: 1px solid var(--border-soft); padding-bottom: 26px; margin-bottom: 34px; }
+  header.hero h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -.4px; }
+  header.hero p { margin: 0; color: var(--fg-dim); max-width: 760px; }
+  .badges { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    font-size: 12px;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--fg-dim);
+    background: var(--bg-soft);
+  }
+  .badge b { color: var(--fg); font-weight: 600; }
+
+  section { margin-bottom: 46px; scroll-margin-top: 24px; }
+  h2 {
+    font-size: 21px;
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-soft);
+    letter-spacing: -.2px;
+  }
+  h3 { font-size: 16px; margin: 26px 0 10px; }
+  h4 { font-size: 14px; margin: 18px 0 8px; color: var(--fg-dim); }
+  p { margin: 10px 0; }
+  ul, ol { padding-left: 22px; margin: 10px 0; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    padding: 1px 5px;
+    word-break: break-word;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.6;
+    margin: 12px 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 12.5px; }
+  pre .c { color: var(--fg-faint); }
+  pre .k { color: var(--accent); }
+
+  .table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 600; color: var(--fg-dim); font-size: 12.5px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 12px; }
+
+  .tree {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    margin: 12px 0;
+    white-space: pre;
+  }
+
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    background: var(--bg-soft);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.danger { border-left-color: var(--danger); }
+  .callout .t { font-weight: 600; margin-bottom: 4px; }
+
+  .flow {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.75;
+    margin: 12px 0;
+    white-space: pre;
+  }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin: 14px 0; }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: var(--bg-card);
+  }
+  .card .h { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .card .d { font-size: 13px; color: var(--fg-dim); }
+
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--fg-faint);
+    background: var(--bg-soft);
+    vertical-align: middle;
+  }
+  .tag.gen { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+  .tag.key { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border-soft);
+    font-size: 12.5px;
+    color: var(--fg-faint);
+  }
+
+  @media (max-width: 900px) {
+    nav.toc { display: none; }
+    main { padding: 28px 18px 80px; }
+  }
+  @media print {
+    nav.toc { display: none; }
+    main { padding: 0; }
+    body { background: #fff; color: #000; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+
+<nav class="toc">
+  <div class="brand">DeerFlow <span>2.0</span></div>
+  <div class="sub">Repository Map · 探索快照</div>
+  <div class="group">Repository Map</div>
+  <ol>
+    <li><a href="#s1"><span class="num">1</span>项目定位</a></li>
+    <li><a href="#s1b"><span class="num">2</span>能用来干什么 · 应用场景</a></li>
+    <li><a href="#s2"><span class="num">3</span>技术栈</a></li>
+    <li><a href="#s3"><span class="num">4</span>服务拓扑</a></li>
+    <li><a href="#s4"><span class="num">5</span>目录结构</a></li>
+    <li><a href="#s5"><span class="num">6</span>应用入口</a></li>
+    <li><a href="#s6"><span class="num">7</span>请求调用链</a></li>
+  </ol>
+  <div class="group">Relevant Files</div>
+  <ol>
+    <li><a href="#s7"><span class="num">8</span>必读文档</a></li>
+    <li><a href="#s8"><span class="num">9</span>后端热点</a></li>
+    <li><a href="#s9"><span class="num">10</span>前端热点</a></li>
+    <li><a href="#s10"><span class="num">11</span>契约与测试</a></li>
+  </ol>
+  <div class="group">Commands</div>
+  <ol>
+    <li><a href="#s11"><span class="num">12</span>引导与启停</a></li>
+    <li><a href="#s12"><span class="num">13</span>后端命令</a></li>
+    <li><a href="#s13"><span class="num">14</span>前端命令</a></li>
+    <li><a href="#s14"><span class="num">15</span>CI 等价最小集</a></li>
+  </ol>
+  <div class="group">附录</div>
+  <ol>
+    <li><a href="#s15"><span class="num">16</span>Generated / Vendor</a></li>
+    <li><a href="#s16"><span class="num">17</span>Unknowns</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>DeerFlow 2.0 · Repository Map</h1>
+  <p>对 <code>deer-flow</code> 仓库的一次只读结构探索（未修改任何代码）。覆盖技术栈、入口、启停/测试/lint 命令、关键目录与文件、请求调用链，以及不应轻易改动的 generated / vendor 区域。</p>
+  <div class="badges">
+    <span class="badge">分支 <b>study-notes</b></span>
+    <span class="badge">后端 <b>2.1.0-rc0</b></span>
+    <span class="badge">Python <b>3.12+</b> / uv</span>
+    <span class="badge">Next.js <b>16</b> / React <b>19</b></span>
+    <span class="badge">Gateway <b>:8001</b> · FE <b>:3000</b> · Nginx <b>:2026</b></span>
+    <span class="badge">后端测试 <b>709</b> · 前端单测 <b>213</b></span>
+  </div>
+</header>
+
+<!-- 1 -->
+<section id="s1">
+<h2>1. 项目定位</h2>
+<p>DeerFlow 2.0 — 基于 LangGraph 的 <b>AI super-agent harness</b>（全栈 monorepo）。单个 lead agent 编排 sub-agents、持久记忆、沙箱执行、可扩展 skills / tools，按 thread 隔离。v2 是彻底重写，与 v1（<code>1.x</code> 分支）无共享代码。</p>
+
+<h3>1.1 一句话定义：它不是「一个 Agent」，而是「跑 Agent 的运行环境」</h3>
+<p>README 的原话是：<i>"DeerFlow started as a Deep Research framework — and the community ran with it… That told us something important: DeerFlow wasn't just a research tool. It was a <b>harness</b> — a runtime that gives agents the infrastructure to actually get work done."</i></p>
+<p>换个说法：<b>「框架」要你自己接线；「harness」出厂即带电池。</b> DeerFlow 2.0 开箱即提供：</p>
+<div class="card-grid">
+  <div class="card"><div class="h">文件系统</div><div class="d">Agent 能真实读写文件、留存产物（PPT / 图表 / 网页 / 视频脚本），而不是只在对话里「描述」结果。</div></div>
+  <div class="card"><div class="h">沙箱执行</div><div class="d">bash / 代码在隔离环境里跑（local / provisioner / K8s 模式），可开关 bash 与文件写权限。</div></div>
+  <div class="card"><div class="h">长期记忆</div><div class="d">跨 thread 记住用户事实与偏好，v1 Markdown 记忆可单向迁移到 v2。</div></div>
+  <div class="card"><div class="h">Skills 扩展</div><div class="d">23 个内置技能包 + 导入 <code>.skill</code> 归档 + MCP 服务器，能力可插拔。</div></div>
+  <div class="card"><div class="h">Sub-agents</div><div class="d">复杂多步任务自动规划并派发子 agent（<code>bash_agent</code> / <code>general_purpose</code> / 自定义），支持 isolated 与 snapshot 两种上下文模式。</div></div>
+  <div class="card"><div class="h">四种 UI 入口</div><div class="d">Web 工作台、终端 TUI、IM 通道（飞书/Slack/Telegram…）、内嵌 Python 客户端。</div></div>
+</div>
+<p>所以你可以 <b>直接用</b>，也可以 <b>拆开改造成自己的 Agent 产品</b> —— 这是它和「一个 Deep Research Demo」最本质的区别。</p>
+</section>
+
+<!-- 2 new -->
+<section id="s1b">
+<h2>2. 能用来干什么 · 应用场景</h2>
+
+<h3>2.1 先理解它的能力组合（场景都由这 6 块拼出来）</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>能力</th><th>它在场景里解决什么</th><th>代码位置</th></tr></thead>
+<tbody>
+<tr><td>Deep Research / 联网检索</td><td>多轮检索 + 抓取 + 综合成报告（内置 InfoQuest / Tavily / Jina / Brave / DDG 等）</td><td><code>deerflow/community/</code>、skill <code>deep-research</code></td></tr>
+<tr><td>Skills（23 个内置）</td><td>把「一类重复工作」固化成可复用流程：PPT、播客、图表、论文评审、前端设计…</td><td><code>skills/public/*</code></td></tr>
+<tr><td>Sub-agents</td><td>长任务并行拆解，避免单上下文爆炸</td><td><code>deerflow/subagents/</code></td></tr>
+<tr><td>Sandbox + 文件系统</td><td>真的执行代码、真的产出文件（可下载/可部署）</td><td><code>deerflow/sandbox/</code></td></tr>
+<tr><td>长期记忆 + Projects</td><td>跨会话记住背景与团队约定</td><td><code>agents/memory/</code>、<code>routers/*projects*</code></td></tr>
+<tr><td>Scheduled Tasks</td><td>定时/周期性自动跑（可复用 thread 或每次新建）</td><td><code>app/scheduler/</code>、<code>/workspace/scheduled-tasks</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.2 官方 <code>Case Studies</code>（落地页真实 demo，可免登录只读打开）</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>场景</th><th>具体任务</th><th>用到的能力</th></tr></thead>
+<tbody>
+<tr><td><b>行业趋势研判</b></td><td>预测 2026 Agent 技术趋势与机会，产出 Deep Research 报告 + 网页</td><td>Deep Research + 文件产出</td></tr>
+<tr><td><b>文生视频 / 多模态创作</b></td><td>检索《傲慢与偏见》具体场景 → 生成参考图 → 生成视频</td><td>检索 + <code>image-generation</code> + <code>video-generation</code></td></tr>
+<tr><td><b>科普内容生成</b></td><td>生成哆啦 A 梦条漫，向青少年讲解 MOE 架构</td><td>图像生成 + 叙事组织</td></tr>
+<tr><td><b>探索性数据分析</b></td><td>Titanic 数据集 EDA，找出影响存活率的关键因素并可视化</td><td>沙箱执行代码 + <code>chart-visualization</code></td></tr>
+<tr><td><b>视频理解 → 深度研究</b></td><td>看完 YC 的 YouTube 视频，再深挖「YC 给技术创始人的建议」</td><td>多模态输入 + Deep Research</td></tr>
+<tr><td><b>信息聚合汇总</b></td><td>收集李飞飞近 6 个月全部播客露面 → 汇总成一份综合报告</td><td>检索 + 长任务编排 + 报告生成</td></tr>
+</tbody>
+</table>
+</div>
+<p class="tag">来源：<code>frontend/src/components/landing/sections/case-study-section.tsx</code>；这些 demo thread 存放在 <code>frontend/public/demo/</code>，落地页以 <code>/showcase/[thread_id]</code> 只读回放。</p>
+
+<h3>2.3 由内置 Skills 反推的「典型用途」清单</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>类别</th><th>Skill</th><th>典型用法</th></tr></thead>
+<tbody>
+<tr><td rowspan="5"><b>研究与写作</b></td><td><code>deep-research</code></td><td>系统性调研一个陌生领域，输出带引用的报告</td></tr>
+<tr><td><code>academic-paper-review</code></td><td>上传 PDF / arXiv 链接，生成结构化同行评审（方法论、贡献、文献定位、改进建议）</td></tr>
+<tr><td><code>systematic-literature-review</code></td><td>做系统性文献综述</td></tr>
+<tr><td><code>newsletter-generation</code></td><td>定期生成 Newsletter</td></tr>
+<tr><td><code>code-documentation</code></td><td>为代码库生成文档</td></tr>
+<tr><td rowspan="4"><b>内容生产</b></td><td><code>ppt-generation</code></td><td>把报告/要点变成演示文稿（真实产出 .pptx 文件）</td></tr>
+<tr><td><code>podcast-generation</code> / <code>music-generation</code> / <code>video-generation</code></td><td>播客、配乐、视频脚本与成片</td></tr>
+<tr><td><code>image-generation</code></td><td>配图、参考图、条漫</td></tr>
+<tr><td><code>consulting-analysis</code></td><td>咨询式结构化分析</td></tr>
+<tr><td rowspan="2"><b>数据与工程</b></td><td><code>data-analysis</code> / <code>chart-visualization</code></td><td>跑数据、出图表、给洞察（沙箱里真跑 Python）</td></tr>
+<tr><td><code>github-deep-research</code> / <code>vercel-deploy-claimable</code></td><td>研究 GitHub 仓库；把生成的 Web 应用部署出预览链接</td></tr>
+<tr><td rowspan="2"><b>设计</b></td><td><code>frontend-design</code> / <code>web-design-guidelines</code></td><td>做前端页面；按 Web Interface Guidelines 审查 UI / 可访问性</td></tr>
+<tr><td><code>chart-visualization</code></td><td>数据可视化</td></tr>
+<tr><td rowspan="3"><b>元能力</b></td><td><code>skill-creator</code> / <code>skill-reviewer</code> / <code>find-skills</code></td><td><b>让 DeerFlow 给自己写新技能</b> —— 这是把重复工作沉淀下来的关键回路</td></tr>
+<tr><td><code>bootstrap</code> / <code>claude-to-deerflow</code></td><td>初始化与从 Claude 生态迁移</td></tr>
+<tr><td><code>surprise-me</code></td><td>探索「它还能干什么」</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.4 按「使用姿势」归纳的 6 类场景</h3>
+<div class="card-grid">
+  <div class="card">
+    <div class="h">A · 个人超级助理（Web / TUI）</div>
+    <div class="d">在聊天框里下复杂任务，它自己规划、检索、跑代码、交付文件。<br/><span class="tag">路径</span> <code>/workspace/chats/[thread_id]</code> 或 <code>deerflow</code> CLI；TUI 与 Web 共享 thread store，两边同步。</div>
+  </div>
+  <div class="card">
+    <div class="h">B · 定时自动化流水线</div>
+    <div class="d">把「每周竞品追踪」「每日舆情摘要」配成 Scheduled Task，可选择复用 thread（带历史上下文）或每次新建。<br/><span class="tag">路径</span> <code>/workspace/scheduled-tasks</code> + <code>app/scheduler/</code>。</div>
+  </div>
+  <div class="card">
+    <div class="h">C · 团队知识/项目空间</div>
+    <div class="d">用 <b>Projects</b> 承载团队约定：项目级 instructions 会在每次 run 时渲染成请求级 <code>&lt;project&gt;</code> 块注入（不进系统提示、不进历史），成员 thread 自动继承。<br/><span class="tag">上限</span> 默认 8192 字节（可配 256–262144）。</div>
+  </div>
+  <div class="card">
+    <div class="h">D · 嵌入 IM 工作流的机器人</div>
+    <div class="d">接到飞书 / Slack / Telegram / Discord / 企微 / 钉钉 / WeChat / Buzz / GitHub Webhook，在群里被 @ 就开干。<br/><span class="tag">路径</span> <code>backend/app/channels/*</code>；Lark 插件还能连文档、日历、多维表格。</div>
+  </div>
+  <div class="card">
+    <div class="h">E · 嵌入自有系统的 Agent 内核</div>
+    <div class="d">用 <code>DeerFlowClient</code> 在 Python 进程内直接调用，返回与 HTTP Gateway <b>相同的 schema</b>，不启服务也能用；或用 <code>create_deerflow_agent()</code> 直接拿 LangGraph 图。<br/><span class="tag">典型</span> 后端批处理、离线任务、二次开发产品。</div>
+  </div>
+  <div class="card">
+    <div class="h">F · 作为 Agent 产品的底座（二次开发）</div>
+    <div class="d">写自定义 skill / MCP 插件 / sub-agent / 中间件，把它变成垂直领域 Agent（法律、医疗、运维、投研…）。<br/><span class="tag">路径</span> <code>deerflow/extensions/</code> + <code>deerflow_extension_api</code>（契约 pin <code>==0.2.1</code>）。</div>
+  </div>
+</div>
+
+<h3>2.5 一个端到端例子（把上面的零件串起来）</h3>
+<div class="flow">需求：「帮我做一份 2026 Agent 趋势报告，做成网页并部署上线」
+
+1. 用户在 Web 聊天框发一句自然语言需求
+2. Lead Agent 规划 → 派发 sub-agent 并行检索（isolated 上下文，互不污染）
+3. 检索结果汇总 → 调用 deep-research 类流程产出报告
+4. 在沙箱里生成 HTML 页面（真实文件，可下载）
+5. 调 vercel-deploy-claimable → 拿到预览 URL 与可认领链接
+6. 全流程 SSE 流式回传：工具卡片、进度、产物
+7. Thread 持久化 → 可在 /showcase 只读回放分享（落地页 case study 就是这么来的）
+→ 想每周自动跑一遍？把它存成 Scheduled Task
+→ 想在飞书群里触发？接上 Lark 通道
+→ 想每天定时把结果推群？加 WeCom 群机器人插件</div>
+
+<div class="callout">
+  <div class="t">选型判断：什么时候适合用 DeerFlow</div>
+  <b>适合</b>：需要「能真干活」的 Agent —— 要联网、要跑代码、要产出文件、要多步编排、要长期记忆、要接进现有渠道。<br/>
+  <b>不适合</b>：只想做单轮问答/简单 RAG 聊天机器人（杀鸡用牛刀）；或完全不能接受 Agent 执行代码/写文件的环境（虽可关闭 bash 与写权限，但那就浪费了它的核心卖点）。
+</div>
+
+<div class="callout warn">
+  <div class="t">安全提示（README 明确警告）</div>
+  部署不当会引入安全风险：Agent 具备 bash 与文件写能力。请按需关闭 bash / 文件写工具、启用沙箱模式，并遵循 README 的 <i>Security Recommendations</i>。
+</div>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+<h2>3. 技术栈</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>层</th><th>技术</th></tr></thead>
+<tbody>
+<tr><td>后端网关</td><td>Python 3.12+，<code>uv</code> workspace；FastAPI + Uvicorn（<code>:8001</code>）；内嵌 LangGraph 兼容运行时（<code>langgraph&gt;=1.2.9</code>）</td></tr>
+<tr><td>Agent 框架</td><td><code>deerflow-harness</code> 包（<code>deerflow.*</code>）：LangGraph / LangChain、中间件链、沙箱、MCP、skills、memory</td></tr>
+<tr><td>扩展契约</td><td><code>deerflow-extension-api</code>（<code>deerflow_extension_api.*</code>），<b>精确 pin <code>==0.2.1</code></b>（版本契约，不可放宽）</td></tr>
+<tr><td>持久层</td><td>SQLAlchemy 2.0(asyncio) + Alembic；SQLite / PostgreSQL / memory；LangGraph checkpointer + Store</td></tr>
+<tr><td>前端</td><td>Next.js <b>16</b> + React <b>19</b> + TypeScript 5.8 + Tailwind CSS <b>4</b>；pnpm <b>10.26.2</b>；Node 22+</td></tr>
+<tr><td>前端状态</td><td>TanStack Query（服务端状态）+ <code>@langchain/langgraph-sdk</code>（LangGraph 流式 / 线程）</td></tr>
+<tr><td>UI 组件</td><td>Shadcn UI、MagicUI、React Bits、Vercel AI SDK elements（<span class="tag gen">registry 生成</span>）；Radix、CodeMirror 6、streamdown、katex、nextra</td></tr>
+<tr><td>测试</td><td>后端 pytest（+ pytest-split / blockbuster / hypothesis）；前端 Rstest（node + happy-dom 双 project）+ Playwright</td></tr>
+<tr><td>Lint / Format</td><td>后端 ruff（<code>line-length=240</code>，py312）；前端 ESLint 9 + Prettier + <code>tsc --noEmit</code></td></tr>
+<tr><td>编排</td><td>根 <code>Makefile</code> → <code>scripts/*.sh|py</code>；Docker Compose（dev/prod）+ nginx（<code>:2026</code>）；Helm chart</td></tr>
+<tr><td>IM 通道</td><td>Feishu/Lark、Slack、Telegram、Discord、DingTalk、WeCom、WeChat、Buzz、GitHub Webhook</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+<h2>4. 服务拓扑</h2>
+<p><code>make dev</code> 起 4 个服务：</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>服务</th><th>端口</th><th>角色</th></tr></thead>
+<tbody>
+<tr><td>Nginx</td><td><code>2026</code></td><td><b>唯一对外入口</b></td></tr>
+<tr><td>Gateway API</td><td><code>8001</code></td><td>FastAPI REST + 内嵌 LangGraph 兼容运行时</td></tr>
+<tr><td>Frontend</td><td><code>3000</code></td><td>Next.js</td></tr>
+<tr><td>Provisioner</td><td><code>8002</code></td><td>仅沙箱为 provisioner/K8s 模式时启动</td></tr>
+<tr><td>Redis</td><td>—</td><td>compose 内可选 stream bridge</td></tr>
+</tbody>
+</table>
+</div>
+<div class="callout">
+  <div class="t">Nginx 路由契约</div>
+  <code>/api/langgraph/*</code> → rewrite 成 <code>/api/*</code> → Gateway；其他 <code>/api/*</code> → Gateway；非 API → Frontend。
+  因此标准 LangGraph SDK 客户端<b>无需独立 LangGraph server</b>。
+</div>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+<h2>5. 目录结构（关键部分）</h2>
+<div class="tree">deer-flow/
+├── Makefile                 # 根编排（dev/start/stop/docker/setup/doctor/extension-*）
+├── config.example.yaml      # → config.yaml（gitignored，运行时可经 Gateway API 改）
+├── extensions_config.example.json  # → extensions_config.json（gitignored，MCP+skills）
+├── AGENTS.md                # ★ 唯一真源（CLAUDE.md 只是 @AGENTS.md 的 shim，禁止编辑）
+├── backend/
+│   ├── pyproject.toml       # uv workspace root（deer-flow 2.1.0-rc0）
+│   ├── langgraph.json       # 图入口 deerflow.agents:make_lead_agent
+│   ├── Makefile             # dev/gateway/test/lint/format/test-shard/migrate-rev
+│   ├── packages/
+│   │   ├── harness/deerflow/   # ★ agent 框架（deerflow.*）
+│   │   │   ├── agents/         # lead_agent/、middlewares/(53个)、memory/、thread_state.py
+│   │   │   ├── runtime/        # ★ runs/{manager,worker}.py、journal.py、stream_bridge/
+│   │   │   │                   #   checkpointer/、events/、checkpoint_state.py、goal.py
+│   │   │   ├── sandbox/        # sandbox.py / tools.py / middleware.py / local/ / lease.py
+│   │   │   ├── subagents/      # executor.py(98KB) / registry.py / builtins/
+│   │   │   ├── mcp/            # tools.py / session_pool.py / oauth.py / tasks/
+│   │   │   ├── skills/         # parser / catalog / projection / export / review/
+│   │   │   ├── config/         # app_config.py / extensions_config.py / paths.py（30 个）
+│   │   │   ├── models/         # factory.py + 各 provider（vllm/codex/claude/mindie）
+│   │   │   ├── community/      # 28 个第三方：tavily/ddg/jina/brave/e2b/aio_sandbox/...
+│   │   │   ├── persistence/    # bootstrap.py + migrations/versions/(27 个) + 各 domain
+│   │   │   ├── extensions/     # loader/manager/registry/policy/isolation/cli
+│   │   │   ├── client.py       # DeerFlowClient（内嵌 Python 客户端，78KB）
+│   │   │   └── tui/            # `deerflow` CLI + Textual 终端工作台
+│   │   └── extension-api/      # 公共扩展契约包
+│   ├── app/                    # 应用层（app.*，禁止被 harness 反向依赖）
+│   │   ├── gateway/            # app.py(47KB) / services.py(104KB) / deps.py / authz.py
+│   │   │   ├── routers/        # 30+ 路由：threads(88KB)、thread_runs(78KB)、mcp(70KB)、
+│   │   │   │                   #   skills、agents、projects、scheduled_tasks、auth、uploads...
+│   │   │   └── auth/           # jwt / oidc / pat / session_cookie / local_provider
+│   │   ├── channels/           # IM：manager.py / service.py / feishu / slack / telegram / ...
+│   │   ├── scheduler/          # 定时任务 service
+│   │   ├── mcp_tasks/          # 持久后台任务服务
+│   │   └── subagent_batches/
+│   ├── tests/                  # ★ 709 个 test_*.py + tests/blocking_io/(50)
+│   └── docs/                   # 39 篇（CONFIGURATION 70KB、ARCHITECTURE、API、AUTH_DESIGN...）
+├── frontend/
+│   ├── package.json / Makefile / rstest.config.ts / playwright*.config.ts
+│   └── src/
+│       ├── app/               # App Router：/workspace/chats/[thread_id]、(auth)、
+│       │                      #   /showcase/[thread_id]、/[lang]/docs、/api/memory、/mock/api
+│       ├── core/              # ★ 业务核心（42 个域：threads/ api/ agents/ auth/ skills/
+│       │                      #   mcp/ models/ tasks/ scheduled-tasks/ messages/ settings/...）
+│       ├── components/        # workspace/(60+) landing/ docs/ ui/(44,生成) ai-elements/(28,生成)
+│       ├── content/           # MDX（en/zh 文档 + blog）
+│       ├── styles/ typings/ hooks/ lib/
+│       └── env.js             # zod env 校验（影响 build 行为）
+├── docker/                    # compose(dev/prod) + nginx.conf + provisioner + lark-cli-*
+├── deploy/helm/deer-flow/     # Helm chart（version/appVersion 须与前后端一致）
+├── skills/public/             # 23 个内置技能包（committed）；custom/ 被 gitignore
+├── contracts/                 # 跨组件 JSON 契约（run_event_stream、subagent_status、skill_review）
+├── scripts/                   # 根编排脚本（serve.sh / docker.sh / deploy.sh / doctor.py 等 34 个）
+├── docs/                      # ARCHITECTURE.md、capability-center.md、plans/、superpowers/
+├── tests/skills/              # 根级：公开技能测试
+└── .github/workflows/         # 14 个 CI workflow</div>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+<h2>6. 应用入口</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>入口</th><th>位置</th></tr></thead>
+<tbody>
+<tr><td>Gateway ASGI app</td><td><code>backend/app/gateway/app.py:app</code>（<code>uvicorn app.gateway.app:app --port 8001</code>）</td></tr>
+<tr><td>LangGraph 图工厂</td><td><code>backend/langgraph.json</code> → <code>deerflow.agents:make_lead_agent</code>（<code>agents/lead_agent/agent.py</code>）</td></tr>
+<tr><td>LangGraph Studio</td><td><code>app/gateway/langgraph_studio.py:langgraph_app</code>；<code>cd backend &amp;&amp; uv run langgraph dev --allow-blocking</code></td></tr>
+<tr><td>CLI / TUI</td><td><code>backend/packages/harness/pyproject.toml</code> → <code>deerflow = "deerflow.tui.cli:main"</code></td></tr>
+<tr><td>内嵌 SDK</td><td><code>deerflow.client.DeerFlowClient</code></td></tr>
+<tr><td>前端根 layout</td><td><code>frontend/src/app/layout.tsx</code>；落地页 <code>src/app/page.tsx</code></td></tr>
+<tr><td>主聊天页</td><td><code>src/app/workspace/chats/[thread_id]/page.tsx</code> → <code>components/workspace/chats/chat-page.tsx</code></td></tr>
+<tr><td>Workspace layout</td><td><code>src/app/workspace/layout.tsx</code>（SSR 鉴权：authenticated / needs_setup / unauthenticated / gateway_unavailable / config_error）</td></tr>
+<tr><td>Docker</td><td><code>make up</code>（prod，<code>scripts/deploy.sh</code>）/ <code>make docker-start</code>（dev，<code>scripts/docker.sh</code>）</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+<h2>7. 请求 / 数据调用链</h2>
+<h3>7.1 Web 聊天主链路</h3>
+<div class="flow">浏览器 (localhost:2026)
+  └─ nginx :2026
+       ├─ /api/langgraph/*  → rewrite /api/*  → Gateway :8001
+       └─ /*                → Next.js :3000
+
+ChatPage (client)
+  → useThreadStream()               core/threads/hooks.ts:1734
+  → useStream (LangGraph SDK)       core/api/api-client.ts:607 getAPIClient()
+      baseUrl = getLangGraphBaseURL()  默认 `${origin}/api/langgraph`
+  → POST /api/threads/{id}/runs/stream（SSE）
+       app/gateway/routers/thread_runs.py:963
+  → RunManager.create_or_reject()    runtime/runs/manager.py:1498
+  → run_agent()                      runtime/runs/worker.py:800
+       ├─ make_lead_agent(config)     agents/lead_agent/agent.py:797
+       │    └─ 中间件链：ThreadData → Uploads → Sandbox → Summarization →
+       │              Title → TodoList → ViewImage → Clarification → (PII redaction 等)
+       ├─ 工具合并：builtins + configured + MCP（get_available_tools）
+       ├─ RunJournal                  runtime/journal.py  （事件/用量/交付回执）
+       ├─ CheckpointStateAccessor     runtime/checkpoint_state.py（full/delta 模式唯一入口）
+       └─ StreamBridge                runtime/stream_bridge/{memory,redis}.py
+  → SSE → SDK normalize → TanStack Query → 组件渲染
+  → 持久历史：useThreadHistory → GET /api/threads/{id}/messages/page</div>
+
+<h3>7.2 其他入口 → 同一运行时</h3>
+<ul>
+  <li><b>IM</b>：<code>app/channels/*</code> → <code>ChannelManager</code> → 内部鉴权调用 Gateway LangGraph 兼容 API</li>
+  <li><b>定时任务</b>：<code>app/scheduler/service.py</code> → <code>launch_scheduled_thread_run</code> → 同一 Gateway run 路径</li>
+  <li><b>MCP 后台任务</b>：<code>app/mcp_tasks/service.py</code>（lease + 恢复，独立于 Agent 循环）</li>
+  <li><b>TUI / CLI</b>：<code>DeerFlowClient.stream()</code>（不走 HTTP）</li>
+</ul>
+<div class="callout">
+  <div class="t">可观测</div>
+  <code>TraceMiddleware</code> 绑定 <code>X-Trace-Id</code>；<code>deerflow/trace_context.py</code> 是 ContextVar 的唯一来源。
+</div>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+<h2>8. 必读文档（改前先看）</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>文件</th><th>为什么</th></tr></thead>
+<tbody>
+<tr><td><code>AGENTS.md</code></td><td><b>唯一真源</b>，跨 agent 共享；<code>CLAUDE.md</code> 只是 shim，<b>禁止编辑</b></td></tr>
+<tr><td><code>backend/AGENTS.md</code></td><td>后端深度：harness/app 边界、中间件、沙箱、MCP、skills、测试布局</td></tr>
+<tr><td><code>frontend/AGENTS.md</code> + <code>frontend/src/AGENTS.md</code></td><td>前端深度：数据/流式流、代码风格、命令</td></tr>
+<tr><td><code>docs/ARCHITECTURE.md</code></td><td>顶层架构（章节编号从 1 开始，符合仓库规范）</td></tr>
+<tr><td><code>backend/docs/CONFIGURATION.md</code>（70KB）</td><td>全部配置项</td></tr>
+<tr><td><code>.github/copilot-instructions.md</code></td><td>已验证的命令序列与坑（含 <code>pnpm check</code> 不可靠的说明）</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+<h2>9. 后端热点文件</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>文件</th><th>关注点</th></tr></thead>
+<tbody>
+<tr><td><code>app/gateway/app.py</code></td><td>路由注册（30 个 <code>include_router</code>）、lifespan</td></tr>
+<tr><td><code>app/gateway/routers/thread_runs.py</code> / <code>threads.py</code></td><td>run 生命周期 &amp; thread CRUD（最大两个路由，88/78KB）</td></tr>
+<tr><td><code>app/gateway/services.py</code>（104KB）</td><td>共享服务层，checkpoint accessor 构造</td></tr>
+<tr><td><code>app/gateway/deps.py</code></td><td>DI：<code>langgraph_runtime</code>、各 repository</td></tr>
+<tr><td><code>runtime/runs/worker.py</code>（140KB）</td><td>真正的 run 执行器 + <code>run_agent()</code></td></tr>
+<tr><td><code>runtime/runs/manager.py</code>（108KB）</td><td><code>RunManager.create/create_or_reject</code>、lease</td></tr>
+<tr><td><code>runtime/journal.py</code></td><td>事件 / 用量 / 交付回执</td></tr>
+<tr><td><code>runtime/checkpoint_state.py</code> + <code>checkpoint_mode.py</code></td><td>checkpoint full/delta 模式，<b>唯一访问入口</b></td></tr>
+<tr><td><code>agents/lead_agent/agent.py</code></td><td>lead agent 组装 + 中间件组合</td></tr>
+<tr><td><code>agents/middlewares/</code>（53 个）</td><td>新行为多在此加</td></tr>
+<tr><td><code>config/app_config.py</code>、<code>config/paths.py</code></td><td>配置热加载边界（部分字段 restart-required）</td></tr>
+<tr><td><code>persistence/migrations/versions/</code>（27 个）</td><td>Alembic 迁移</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- 9 -->
+<section id="s9">
+<h2>10. 前端热点文件</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>文件</th><th>关注点</th></tr></thead>
+<tbody>
+<tr><td><code>src/core/threads/hooks.ts</code>（121KB）</td><td><b>流式状态核心</b>：<code>useThreadStream</code>、消息顺序 / seq</td></tr>
+<tr><td><code>src/core/threads/message-order.ts</code></td><td>位置权威（seq 优先）</td></tr>
+<tr><td><code>src/core/api/api-client.ts</code></td><td>LangGraph SDK 单例</td></tr>
+<tr><td><code>src/core/api/fetcher.ts</code></td><td>REST 封装 + CSRF 双提交 + 401 跳转</td></tr>
+<tr><td><code>src/components/workspace/chats/chat-page.tsx</code></td><td>主聊天页装配</td></tr>
+<tr><td><code>src/components/workspace/input-box.tsx</code>（102KB）</td><td>输入框（模型 / 模式 / effort / 技能）</td></tr>
+<tr><td><code>src/components/workspace/messages/message-list.tsx</code>（49KB）</td><td>消息渲染</td></tr>
+<tr><td><code>src/core/i18n/locales/{en-US,zh-CN}.ts</code></td><td>大体积文案，<b>新增 UI 文案必改双语</b></td></tr>
+<tr><td><code>src/env.js</code></td><td>env zod 校验（影响 build）</td></tr>
+<tr><td><code>next.config.js</code></td><td>rewrites（无 nginx 时直连 gateway）</td></tr>
+<tr><td><code>src/core/config/index.ts</code></td><td><code>getLangGraphBaseURL</code> / <code>getBackendBaseURL</code></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- 10 -->
+<section id="s10">
+<h2>11. 契约 / 测试</h2>
+<ul>
+  <li><code>contracts/run_event_stream_contract.json</code>、<code>contracts/skill_review/*.schema.json</code></li>
+  <li><code>backend/tests/</code>（709 个）、<code>backend/tests/blocking_io/</code>（50 个严格 Blockbuster 门禁）</li>
+  <li><code>frontend/tests/unit/</code>（213 个）、<code>frontend/tests/e2e/</code>（Playwright）</li>
+</ul>
+<div class="callout danger">
+  <div class="t">跨端成对改动</div>
+  <code>frontend/tests/e2e-real-backend/auth-disabled-contract.spec.ts</code> ↔ <code>backend/tests/test_auth_me_permissions.py</code>
+  —— <b>新增权限必须同时改两处</b>。
+</div>
+</section>
+
+<!-- 11 -->
+<section id="s11">
+<h2>12. 引导与启停</h2>
+<p class="callout warn" style="display:block">
+  <span class="t">首次引导（必须先做）</span><br />
+  仓库当前<b>没有</b> <code>config.yaml</code> / <code>extensions_config.json</code>。
+</p>
+<pre><code><span class="c"># 首次引导</span>
+<span class="k">make config</span>        <span class="c"># 从 example 复制（已存在则 abort）</span>
+<span class="k">make install</span>       <span class="c"># uv sync --locked + pnpm install + pre-commit</span>
+<span class="k">make doctor</span>        <span class="c"># 校验配置与依赖</span>
+<span class="k">make check</span>         <span class="c"># 校验 Node 22+ / pnpm / uv / nginx</span>
+
+<span class="c"># 启动 / 停止</span>
+<span class="k">make dev</span>           <span class="c"># 全栈 hot-reload：Gateway 8001 + FE 3000 + nginx 2026 → http://localhost:2026</span>
+<span class="k">make dev-daemon</span>
+<span class="k">make start</span>         <span class="c"># 本地生产模式（每次 next build；SKIP_FRONTEND_BUILD=1 复用）</span>
+<span class="k">make stop</span>
+<span class="k">make docker-init</span> &amp;&amp; <span class="k">make docker-start</span>   <span class="c"># Docker 开发（推荐）</span>
+<span class="k">make up</span> / <span class="k">make down</span>                    <span class="c"># Docker 生产</span>
+<span class="k">make docker-logs</span>[-frontend|-gateway|-redis]</code></pre>
+</section>
+
+<!-- 12 -->
+<section id="s12">
+<h2>13. 后端命令（<code>cd backend</code>）</h2>
+<pre><code><span class="k">make install</span>          <span class="c"># uv sync --locked</span>
+<span class="k">make dev</span>              <span class="c"># uvicorn --reload（排除 .deer-flow / sandbox，勿换成裸 --reload）</span>
+<span class="k">make gateway</span>          <span class="c"># 无 reload</span>
+<span class="k">make test</span>             <span class="c"># 离线套件：pytest -m "not live" --ignore=tests/blocking_io</span>
+<span class="k">make test-live</span>        <span class="c"># 真实 API（需凭证）</span>
+<span class="k">make test-blocking-io</span> <span class="c"># 严格 Blockbuster 门禁（tests/blocking_io）</span>
+<span class="k">make test-shard</span> SPLITS=4 GROUP=2        <span class="c"># CI 分片的本地等价</span>
+<span class="k">make test-shard-durations</span>               <span class="c"># 刷新 backend/.test_durations</span>
+<span class="k">make lint</span>             <span class="c"># ruff check + ruff format --check</span>
+<span class="k">make format</span>           <span class="c"># ruff check --fix + ruff format</span>
+<span class="k">make migrate-rev</span> MSG=<span class="c">"..."</span>              <span class="c"># 生成 Alembic revision（启动自动 upgrade head）</span>
+
+<span class="c"># 单测</span>
+PYTHONPATH=. uv run pytest tests/test_x.py::test_fn -q</code></pre>
+</section>
+
+<!-- 13 -->
+<section id="s13">
+<h2>14. 前端命令（<code>cd frontend</code>）</h2>
+<pre><code><span class="k">pnpm install</span>
+<span class="k">pnpm dev</span>           <span class="c"># 默认 Webpack；DEER_FLOW_DEV_BUNDLER=turbo 切 Turbopack</span>
+<span class="k">pnpm build</span>         <span class="c"># 生产构建（建议 BETTER_AUTH_SECRET=local-dev-secret）</span>
+<span class="k">pnpm start</span>
+<span class="k">pnpm test</span>          <span class="c"># Rstest（node + *.dom.test.* 走 happy-dom）</span>
+<span class="k">pnpm rstest run</span> &lt;pattern&gt;
+<span class="k">pnpm test:e2e</span>      <span class="c"># Playwright（Chromium）</span>
+<span class="k">pnpm lint</span>          <span class="c"># ESLint（忽略 ui/ 与 ai-elements/）</span>
+<span class="k">pnpm lint:fix</span>
+<span class="k">pnpm format</span>        <span class="c"># prettier --check（format:write 应用）</span>
+<span class="k">pnpm typecheck</span>     <span class="c"># tsc --noEmit</span>
+<span class="k">pnpm check</span>         <span class="c"># ⚠️ lint + typecheck，见 Unknowns #3</span>
+<span class="k">pnpm perf:check</span>    <span class="c"># 路由资源预算</span>
+<span class="k">pnpm catalog:sync</span>  <span class="c"># 重新生成 builtin.demo.json</span></code></pre>
+</section>
+
+<!-- 14 -->
+<section id="s14">
+<h2>15. CI 等价最小集（提交前）</h2>
+<pre><code><span class="k">cd backend</span>  &amp;&amp; <span class="k">make lint</span> &amp;&amp; <span class="k">make test</span>
+<span class="k">cd frontend</span> &amp;&amp; <span class="k">pnpm format</span> &amp;&amp; <span class="k">pnpm lint</span> &amp;&amp; <span class="k">pnpm typecheck</span> &amp;&amp; <span class="k">pnpm build</span>
+<span class="k">uv lock --check</span>    <span class="c"># cd backend（CI 校验锁文件同步）</span></code></pre>
+</section>
+
+<!-- 15 -->
+<section id="s15">
+<h2>16. Generated / Vendor / Third-party —— 不要轻易改</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>路径</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>frontend/src/components/ui/**</code>（44 文件）</td><td>Shadcn/MagicUI/React Bits <b>registry 生成</b>；<code>eslint.config.js</code> 已 <code>ignores</code>。手写改动会被下次 regenerate 覆盖</td></tr>
+<tr><td><code>frontend/src/components/ai-elements/**</code>（28 文件）</td><td>Vercel AI SDK elements <b>registry 生成</b>，同样被 ESLint 忽略</td></tr>
+<tr><td><code>frontend/src/core/capabilities/builtin.demo.json</code></td><td>由 <code>pnpm catalog:sync</code> 从 <code>.../deerflow/capabilities/builtin.json</code> 生成；单测强制相等</td></tr>
+<tr><td><code>frontend/public/demo/**</code>（13 个 thread fixture，含 2MB mp4）</td><td><code>pnpm demo:save</code> 录制的静态 demo 快照</td></tr>
+<tr><td><code>frontend/src/app/mock/api/**</code></td><td>静态 demo 应答 fixture</td></tr>
+<tr><td><code>frontend/public/images/**</code>、<code>frontend/src/content/**/*.mdx</code></td><td>资源 / 内容（<code>.prettierignore</code> 排除 mdx）</td></tr>
+<tr><td><code>backend/uv.lock</code>（871KB）、<code>frontend/pnpm-lock.yaml</code>（424KB）</td><td>锁文件；只经 <code>uv sync/lock</code>、<code>pnpm install</code> 变更，勿手改</td></tr>
+<tr><td><code>backend/.test_durations</code>（1.6MB）</td><td>pytest 时长基线，由 <code>make test-shard-durations</code> 重建</td></tr>
+<tr><td><code>.../persistence/migrations/versions/*.py</code></td><td>Alembic 自动生成的 revision，<b>已提交的 revision 不可回改</b></td></tr>
+<tr><td><code>.../deerflow/community/**</code>（28 个）</td><td>第三方服务适配（tavily/ddg/jina/brave/e2b/exa/firecrawl/...）</td></tr>
+<tr><td><code>.../deerflow/models/patched_*.py</code></td><td>对上游 provider 的 monkey patch（升级 langchain 时高风险）</td></tr>
+<tr><td><code>skills/public/skill-creator/LICENSE.txt</code> 等</td><td>第三方许可证文件</td></tr>
+<tr><td><code>deploy/helm/deer-flow/**</code></td><td>Helm 模板（含 auto-generated password 逻辑）</td></tr>
+<tr><td><code>CHANGELOG.md</code>（270KB）/ <code>CHANGELOG_zh.md</code>（257KB）</td><td>变更日志，体量极大</td></tr>
+<tr><td><code>pr-build/*.png</code>、<code>docs/pr-evidence/*.png</code>、<code>docs/tui/*.svg</code></td><td>PR 证据截图</td></tr>
+<tr><td><code>backend/Dockerfile</code>、<code>docker/*</code></td><td>部署镜像定义（改 <code>UV_IMAGE</code> 需同步 <code>backend/tests/test_ci_uv_version_pin.py</code>）</td></tr>
+<tr><td><code>.github/workflows/**</code></td><td>CI（含 pinned <code>uv@0.11.1</code>、<code>pnpm@10.26.2</code>）</td></tr>
+</tbody>
+</table>
+</div>
+<div class="callout danger">
+  <div class="t">版本锁定：改一处必须四处同步</div>
+  <code>backend/pyproject.toml</code>、<code>frontend/package.json</code>、<code>deploy/helm/deer-flow/Chart.yaml</code>（<code>version</code> + <code>appVersion</code>）。
+  用 <code>scripts/bump_version.sh &lt;ver&gt;</code> + <code>scripts/verify_versions.sh &lt;ver&gt;</code>。
+</div>
+</section>
+
+<!-- 16 -->
+<section id="s16">
+<h2>17. Unknowns</h2>
+<div class="card-grid">
+  <div class="card">
+    <div class="h">1 · 具体需求未给出</div>
+    <div class="d">「与当前需求最相关的目录和文件」按通用改动热点列出。给出需求（修 bug / 加功能 / 改哪一侧）后可收窄到具体文件 + 需同步更新的测试与文档。</div>
+  </div>
+  <div class="card">
+    <div class="h">2 · 本机工具链有缺口</div>
+    <div class="d">
+      <ul style="padding-left:18px;margin:4px 0">
+        <li><code>pnpm</code> 未安装 → <code>corepack enable</code> 或 <code>make install</code></li>
+        <li><code>nginx</code> 未安装 → <code>make dev</code> 无法起统一入口；可分别起后端/前端，或走 Docker</li>
+        <li><code>uv</code> 为 <b>0.10.12</b>，CI/Dockerfile pin <b>0.11.1</b> → <code>uv sync --locked</code> 可能报版本不符</li>
+        <li>Node v22.22.2（满足 ≥22）；Python 需确认 3.12</li>
+        <li><code>frontend/node_modules</code> 不存在，<b>未安装依赖</b></li>
+      </ul>
+    </div>
+  </div>
+  <div class="card">
+    <div class="h">3 · <code>pnpm check</code> 不可靠</div>
+    <div class="d"><code>.github/copilot-instructions.md</code> 明确记录它在此仓库会失败（<code>next lint</code> 目录解析问题），应改用 <code>pnpm lint</code> + <code>pnpm typecheck</code>。而 <code>frontend/AGENTS.md</code> 与根 <code>AGENTS.md</code> 仍把它列为提交前必跑 —— <b>文档间存在冲突</b>；CI 实际跑 format + lint + typecheck + build。</div>
+  </div>
+  <div class="card">
+    <div class="h">4 · 缺少运行时配置</div>
+    <div class="d"><code>config.yaml</code> / <code>extensions_config.json</code> 不存在（已 gitignore）。任何涉及运行时的验证都需先 <code>make config</code> 并填入至少一个 <code>models</code> 条目 + <code>.env</code> 密钥。</div>
+  </div>
+  <div class="card">
+    <div class="h">5 · 缺失目录属正常</div>
+    <div class="d"><code>backend/extensions/</code>、<code>backend/samples/</code>（除 <code>other_agent_demo</code>）、<code>skills/custom/</code> 均为 gitignore 或未创建。</div>
+  </div>
+  <div class="card">
+    <div class="h">6 · <code>.test_durations</code> 可能过期</div>
+    <div class="d">若 <code>make test-shard</code> 结果不平衡，需 <code>make test-shard-durations</code> 重建并提交。</div>
+  </div>
+  <div class="card">
+    <div class="h">7 · pnpm override 与安全</div>
+    <div class="d">nextra 引入 <code>@xmldom/xmldom</code> 0.9.8 漏洞，需保留 <code>pnpm-workspace.yaml</code> 的 override；改动前必须重跑 docs 构建验证。</div>
+  </div>
+  <div class="card">
+    <div class="h">8 · 分支状态</div>
+    <div class="d">当前分支 <code>study-notes</code>（与 <code>origin/main</code> 同步到 <code>a4e43a2</code>），本次探索未改动任何文件。</div>
+  </div>
+</div>
+</section>
+
+<footer>
+  只读探索快照 · 生成于 2026-09-19 · 未修改仓库任何代码。章节编号自 1 起。
+</footer>
+</main>
+</div>
+</body>
+</html>
