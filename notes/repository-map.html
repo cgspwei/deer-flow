@@ -6,6 +6,44 @@
 <title>DeerFlow 2.0 · Repository Map</title>
 <style>
   :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-soft: #f6f7f9;
+    --bg-card: #ffffff;
+    --border: #e2e5ea;
+    --border-soft: #eceff3;
+    --fg: #1c2028;
+    --fg-dim: #5b6472;
+    --fg-faint: #8b93a1;
+    --accent: #2563eb;
+    --accent-2: #0f9d76;
+    --warn: #a16207;
+    --danger: #c0392b;
+    --code-bg: #f5f6f8;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  /* 深色：系统偏好为深色且未手动锁定浅色时跟随系统 */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0f1115;
+      --bg-soft: #151922;
+      --bg-card: #191e28;
+      --border: #262c38;
+      --border-soft: #1f2530;
+      --fg: #e6e9ef;
+      --fg-dim: #9aa4b5;
+      --fg-faint: #6b7484;
+      --accent: #6ea8fe;
+      --accent-2: #7ee0c0;
+      --warn: #f5c465;
+      --danger: #f28b82;
+      --code-bg: #12161e;
+    }
+  }
+  /* 深色：手动切换（优先于系统偏好） */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
     --bg: #0f1115;
     --bg-soft: #151922;
     --bg-card: #191e28;
@@ -19,24 +57,6 @@
     --warn: #f5c465;
     --danger: #f28b82;
     --code-bg: #12161e;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #ffffff;
-      --bg-soft: #f6f7f9;
-      --bg-card: #ffffff;
-      --border: #e2e5ea;
-      --border-soft: #eceff3;
-      --fg: #1c2028;
-      --fg-dim: #5b6472;
-      --fg-faint: #8b93a1;
-      --accent: #2563eb;
-      --accent-2: #0f9d76;
-      --warn: #a16207;
-      --danger: #c0392b;
-      --code-bg: #f5f6f8;
-    }
   }
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
@@ -227,18 +247,49 @@
     color: var(--fg-faint);
   }
 
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 14px;
+    right: 16px;
+    z-index: 50;
+    font: inherit;
+    font-size: 12.5px;
+    line-height: 1;
+    color: var(--fg-dim);
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 13px;
+    cursor: pointer;
+  }
+  .theme-toggle:hover { color: var(--fg); border-color: var(--accent); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
   @media (max-width: 900px) {
     nav.toc { display: none; }
     main { padding: 28px 18px 80px; }
   }
   @media print {
-    nav.toc { display: none; }
+    nav.toc, .theme-toggle { display: none; }
     main { padding: 0; }
     body { background: #fff; color: #000; }
   }
 </style>
+<script>
+  // 在首屏绘制前应用已保存的主题，避免闪色
+  (function () {
+    try {
+      var saved = localStorage.getItem("repository-map-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
+<button type="button" class="theme-toggle" id="theme-toggle" title="切换主题"></button>
 <div class="layout">
 
 <nav class="toc">
@@ -825,5 +876,34 @@ PYTHONPATH=. uv run pytest tests/test_x.py::test_fn -q</code></pre>
 </footer>
 </main>
 </div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById("theme-toggle");
+    var KEY = "repository-map-theme";
+
+    function currentTheme() {
+      var attr = root.getAttribute("data-theme");
+      if (attr === "light" || attr === "dark") return attr;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    function sync() {
+      var isDark = currentTheme() === "dark";
+      btn.textContent = isDark ? "浅色" : "深色";
+      btn.title = isDark ? "切换到浅色主题" : "切换到深色主题";
+      btn.setAttribute("aria-label", btn.title);
+    }
+
+    btn.addEventListener("click", function () {
+      var next = currentTheme() === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+      sync();
+    });
+
+    sync();
+  })();
+</script>
 </body>
 </html>

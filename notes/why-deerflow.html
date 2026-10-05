@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DeerFlow 2.0 · 为什么需要 DeerFlow</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --bg-soft: #f6f7f9;
+    --bg-card: #ffffff;
+    --border: #e2e5ea;
+    --border-soft: #eceff3;
+    --fg: #1c2028;
+    --fg-dim: #5b6472;
+    --fg-faint: #8b93a1;
+    --accent: #2563eb;
+    --accent-2: #0f9d76;
+    --warn: #a16207;
+    --danger: #c0392b;
+    --code-bg: #f5f6f8;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  /* 深色：系统偏好为深色且未手动锁定浅色时跟随系统 */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0f1115;
+      --bg-soft: #151922;
+      --bg-card: #191e28;
+      --border: #262c38;
+      --border-soft: #1f2530;
+      --fg: #e6e9ef;
+      --fg-dim: #9aa4b5;
+      --fg-faint: #6b7484;
+      --accent: #6ea8fe;
+      --accent-2: #7ee0c0;
+      --warn: #f5c465;
+      --danger: #f28b82;
+      --code-bg: #12161e;
+    }
+  }
+  /* 深色：手动切换（优先于系统偏好） */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1115;
+    --bg-soft: #151922;
+    --bg-card: #191e28;
+    --border: #262c38;
+    --border-soft: #1f2530;
+    --fg: #e6e9ef;
+    --fg-dim: #9aa4b5;
+    --fg-faint: #6b7484;
+    --accent: #6ea8fe;
+    --accent-2: #7ee0c0;
+    --warn: #f5c465;
+    --danger: #f28b82;
+    --code-bg: #12161e;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .layout { display: flex; max-width: 1400px; margin: 0 auto; }
+
+  /* Sidebar */
+  nav.toc {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    width: 250px;
+    flex: 0 0 250px;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 18px 40px 24px;
+    border-right: 1px solid var(--border-soft);
+  }
+  nav.toc .brand { font-weight: 700; font-size: 15px; letter-spacing: .2px; margin-bottom: 4px; }
+  nav.toc .brand span { color: var(--accent); }
+  nav.toc .sub { font-size: 12px; color: var(--fg-faint); margin-bottom: 20px; }
+  nav.toc ol { list-style: none; padding-left: 0; margin: 0; }
+  nav.toc li { margin: 1px 0; }
+  nav.toc a {
+    display: block;
+    padding: 5px 10px;
+    border-radius: 6px;
+    color: var(--fg-dim);
+    text-decoration: none;
+    font-size: 13.5px;
+  }
+  nav.toc a:hover { background: var(--bg-soft); color: var(--fg); }
+  nav.toc a .num { display: inline-block; width: 20px; color: var(--fg-faint); font-variant-numeric: tabular-nums; }
+  nav.toc .group {
+    margin-top: 16px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--fg-faint);
+    padding-left: 10px;
+  }
+
+  /* Main */
+  main { flex: 1 1 auto; min-width: 0; padding: 40px 44px 120px; }
+  header.hero { border-bottom: 1px solid var(--border-soft); padding-bottom: 26px; margin-bottom: 34px; }
+  header.hero h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: -.4px; }
+  header.hero p { margin: 0; color: var(--fg-dim); max-width: 760px; }
+  .badges { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    font-size: 12px;
+    padding: 3px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--fg-dim);
+    background: var(--bg-soft);
+  }
+  .badge b { color: var(--fg); font-weight: 600; }
+
+  section { margin-bottom: 46px; scroll-margin-top: 24px; }
+  h2 {
+    font-size: 21px;
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-soft);
+    letter-spacing: -.2px;
+  }
+  h3 { font-size: 16px; margin: 26px 0 10px; }
+  h4 { font-size: 14px; margin: 18px 0 8px; color: var(--fg-dim); }
+  p { margin: 10px 0; }
+  ul, ol { padding-left: 22px; margin: 10px 0; }
+  li { margin: 4px 0; }
+  a { color: var(--accent); }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--code-bg);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    padding: 1px 5px;
+    word-break: break-word;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    line-height: 1.6;
+    margin: 12px 0;
+  }
+  pre code { background: none; border: none; padding: 0; font-size: 12.5px; }
+
+  .table-wrap { overflow-x: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  th { background: var(--bg-soft); font-weight: 600; color: var(--fg-dim); font-size: 12.5px; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 12px; }
+
+  .flow {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.75;
+    margin: 12px 0;
+    white-space: pre;
+  }
+
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    background: var(--bg-soft);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    font-size: 14px;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.danger { border-left-color: var(--danger); }
+  .callout.ok { border-left-color: var(--accent-2); }
+  .callout .t { font-weight: 600; margin-bottom: 4px; }
+
+  blockquote {
+    margin: 14px 0;
+    padding: 10px 16px;
+    border-left: 3px solid var(--border);
+    background: var(--bg-soft);
+    border-radius: 0 8px 8px 0;
+    color: var(--fg-dim);
+    font-size: 14px;
+  }
+  blockquote b { color: var(--fg); }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin: 14px 0; }
+  .card { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--bg-card); }
+  .card .h { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .card .d { font-size: 13px; color: var(--fg-dim); }
+
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--fg-faint);
+    background: var(--bg-soft);
+    vertical-align: middle;
+  }
+
+  ul.checklist { list-style: none; padding-left: 4px; margin: 12px 0; }
+  ul.checklist li { margin: 7px 0; }
+  ul.checklist li::before { content: "\2610"; margin-right: 9px; color: var(--accent); font-size: 15px; }
+
+  footer {
+    margin-top: 60px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border-soft);
+    font-size: 12.5px;
+    color: var(--fg-faint);
+  }
+
+  /* Theme toggle */
+  .theme-toggle {
+    position: fixed;
+    top: 14px;
+    right: 16px;
+    z-index: 50;
+    font: inherit;
+    font-size: 12.5px;
+    line-height: 1;
+    color: var(--fg-dim);
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 13px;
+    cursor: pointer;
+  }
+  .theme-toggle:hover { color: var(--fg); border-color: var(--accent); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  @media (max-width: 900px) {
+    nav.toc { display: none; }
+    main { padding: 28px 18px 80px; }
+  }
+  @media print {
+    nav.toc, .theme-toggle { display: none; }
+    main { padding: 0; }
+    body { background: #fff; color: #000; }
+  }
+</style>
+<script>
+  // 在首屏绘制前应用已保存的主题，避免闪色
+  (function () {
+    try {
+      var saved = localStorage.getItem("repository-map-theme");
+      if (saved === "light" || saved === "dark") {
+        document.documentElement.setAttribute("data-theme", saved);
+      }
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+<button type="button" class="theme-toggle" id="theme-toggle" title="切换主题"></button>
+<div class="layout">
+
+<nav class="toc">
+  <div class="brand">DeerFlow <span>2.0</span></div>
+  <div class="sub">产品定位 · 为什么需要它</div>
+  <div class="group">Why DeerFlow</div>
+  <ol>
+    <li><a href="#s0"><span class="num">0</span>最尖锐的问题</a></li>
+    <li><a href="#s1"><span class="num">1</span>三层能力模型</a></li>
+    <li><a href="#s2"><span class="num">2</span>没有它会缺什么</a></li>
+    <li><a href="#s3"><span class="num">3</span>必要性论证</a></li>
+    <li><a href="#s4"><span class="num">4</span>与 LangGraph 的关系</a></li>
+    <li><a href="#s5"><span class="num">5</span>不该投入的场景</a></li>
+    <li><a href="#s6"><span class="num">6</span>投资决策清单</a></li>
+    <li><a href="#s7"><span class="num">7</span>FAQ：质疑与回应</a></li>
+  </ol>
+  <div class="group">附录</div>
+  <ol>
+    <li><a href="#s8"><span class="num">8</span>事实来源与校准项</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>为什么需要 DeerFlow</h1>
+  <p>LangChain / LangGraph 解决的是「怎么把一次模型调用编排起来」；DeerFlow 解决的是「怎么让一个 Agent 在生产环境里长期、安全、可观测地干活」。前者是库，后者是运行时 —— 而且 DeerFlow 自己就构建在 LangGraph / LangChain 之上。</p>
+  <div class="badges">
+    <span class="badge">定位 <b>super agent harness</b></span>
+    <span class="badge">上游依赖 <b>LangGraph ≥1.2.9</b></span>
+    <span class="badge">内置 Skills <b>23</b></span>
+    <span class="badge">IM 通道 <b>10</b></span>
+    <span class="badge">中间件模块 <b>40+</b></span>
+    <span class="badge">单向依赖 <b>CI 强制</b></span>
+  </div>
+</header>
+
+<!-- 0 -->
+<section id="s0">
+<h2>0. 先回答那个最尖锐的问题</h2>
+
+<div class="callout danger">
+  <div class="t">已经有 LangChain 和 LangGraph 了，凭什么再投人做这个产品？</div>
+  因为当你用 LangGraph 从 0 做一个「能真干活的 Agent 产品」时，写完那个 graph 只完成了大约 <b>20%</b> 的工作。剩下的 <b>80%</b> 与「你的业务是什么」无关，<b>每个 Agent 产品都要做一遍，而且做错的地方几乎一样</b>。
+</div>
+
+<p>那 80% 是：</p>
+<ul>
+  <li>Agent 要<b>真的执行代码</b> → 沙箱、租约、超时、文件写权限、审计</li>
+  <li>Agent 要<b>真的产出文件</b> → 文件系统挂载、产物留存、下载、回放</li>
+  <li>会话要<b>能断线重连、能续跑、能回放</b> → checkpoint、run 生命周期、并发 lease</li>
+  <li>前端要<b>实时看到中间过程</b> → SSE 流式协议、事件契约、增量快照</li>
+  <li>上下文会<b>爆掉</b> → 摘要压缩、工具输出预算、token 预算</li>
+  <li>能力要<b>能热插拔</b> → skills 发现/加载/投影、MCP 服务器、工具策略</li>
+  <li>长任务要<b>能拆</b> → sub-agent 派发、上下文隔离、结果回传</li>
+  <li>要<b>接进人的工作流</b> → Web、TUI、IM（飞书/Slack/Telegram…）、内嵌 SDK</li>
+  <li>要<b>上生产</b> → 鉴权、多租户隔离、配置热加载、DB 迁移、可观测</li>
+  <li>要<b>能被别人二次开发</b> → 稳定的扩展契约与边界</li>
+</ul>
+
+<div class="callout ok">
+  <div class="t">这就是 DeerFlow 存在的理由</div>
+  它把上面那张清单从「每个项目的重复劳动」变成「一次实现 + 配置与扩展」。
+</div>
+</section>
+
+<!-- 1 -->
+<section id="s1">
+<h2>1. 三层能力模型：把「Agent 产品」拆开看</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>层</th><th>是什么</th><th>谁提供</th><th>没有 DeerFlow 的代价</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>A · 模型与编排</b></td>
+  <td>LLM 调用、tool calling、状态图、分支与循环</td>
+  <td><b>LangGraph / LangChain</b></td>
+  <td>几乎为 0，本来就有</td>
+</tr>
+<tr>
+  <td><b>B · Harness 运行时</b></td>
+  <td>沙箱、文件系统、记忆、run 生命周期、流式协议、skills/MCP、sub-agent、鉴权、多入口、调度、可观测</td>
+  <td><b>DeerFlow</b></td>
+  <td><b>这就是重复劳动的全部</b></td>
+</tr>
+<tr>
+  <td><b>C · 业务形态</b></td>
+  <td>领域技能、prompt、工具集、流程定义、UI 包装、部署形态</td>
+  <td><b>你</b></td>
+  <td>本来就该你写</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout">
+  <div class="t">关键认知</div>
+  DeerFlow 的竞争对手不是 LangGraph，而是<b>「每个团队自己手写的那层 B」</b>。
+</div>
+
+<blockquote>
+  DeerFlow 2.0 is no longer a framework you wire together. It's a super agent harness — batteries included, fully extensible. Built on LangGraph and LangChain, it ships with everything an agent needs out of the box: a filesystem, memory, skills, sandbox-aware execution, and the ability to plan and spawn sub-agents for complex, multi-step tasks.<br />
+  <span class="tag">来源</span> <code>README.md:1137</code>
+</blockquote>
+
+<p>一句更直白的话：<b>框架要你自己接线；harness 出厂即带电池。</b></p>
+</section>
+
+<!-- 2 -->
+<section id="s2">
+<h2>2. 没有 DeerFlow 的话，我们具体缺什么</h2>
+<p>下面每一项都是「看起来简单、真做起来是个项目」的能力。代码位置是仓库里的真实落点，可逐个核对。</p>
+
+<h3>2.1 执行层：让 Agent 真的能动手</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>能力</th><th>缺失后果</th><th>实现落点</th></tr></thead>
+<tbody>
+<tr><td>沙箱执行（local / provisioner / K8s 三模式）</td><td>Agent 只能「描述」要跑的代码，不能真的跑；或直接在宿主裸跑，安全不可控</td><td><code>deerflow/sandbox/</code></td></tr>
+<tr><td>真实文件系统（workspace / uploads / outputs）</td><td>产物只能塞进对话文本，无法留存、下载、回放、二次加工</td><td><code>thread_data_middleware.py</code></td></tr>
+<tr><td>沙箱审计与写权限管控</td><td>无法回答「Agent 刚才改了什么」</td><td><code>sandbox_audit_middleware.py</code>、<code>read_before_write_middleware.py</code></td></tr>
+<tr><td>工具输出持久化与预算</td><td>一次大输出撑爆上下文，后续全盘失效</td><td><code>tool_output_*</code>、<code>tool_output_budget_middleware.py</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.2 运行层：让一次运行可靠、可恢复、可并发</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>能力</th><th>缺失后果</th><th>实现落点</th></tr></thead>
+<tbody>
+<tr><td>Thread / Run 生命周期 + lease</td><td>进程一重启任务就丢；两个请求互相踩</td><td><code>runtime/runs/{manager,worker}.py</code></td></tr>
+<tr><td>Checkpoint（full / delta 双模式，唯一访问入口）</td><td>无法续跑、无法回放、无法分叉</td><td><code>runtime/checkpoint_state.py</code></td></tr>
+<tr><td>StreamBridge（memory / redis）</td><td>多实例部署时流式事件丢一半</td><td><code>runtime/stream_bridge/</code></td></tr>
+<tr><td>SSE 事件流契约 + 增量 values 快照</td><td>前后端各自猜协议，一改就崩</td><td><code>contracts/run_event_stream_contract.json</code></td></tr>
+<tr><td>事件日志 / 用量 / 交付回执</td><td>出了问题无法复盘，无法计费</td><td><code>runtime/journal.py</code></td></tr>
+<tr><td>上下文压缩与 token 预算</td><td>长任务必然中途失智</td><td><code>summarization_middleware.py</code>、<code>token_budget_middleware.py</code></td></tr>
+<tr><td>循环检测、异常收尾、安全终止</td><td>Agent 陷入死循环烧钱</td><td><code>loop_detection_middleware.py</code>、<code>*_termination_detectors.py</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.3 能力层：让 Agent 的「本事」可插拔</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>能力</th><th>缺失后果</th><th>实现落点</th></tr></thead>
+<tbody>
+<tr><td>Skills（23 个内置 + <code>.skill</code> 归档导入 + 渐进式投影）</td><td>能力硬编码进 prompt，加一个能力改一次代码</td><td><code>deerflow/skills/</code></td></tr>
+<tr><td>MCP 服务器（会话池 + OAuth + 持久后台任务）</td><td>接外部工具要逐个写适配器</td><td><code>deerflow/mcp/</code></td></tr>
+<tr><td>Sub-agents（isolated / snapshot 上下文隔离）</td><td>长任务单上下文爆炸，无法并行</td><td><code>deerflow/subagents/</code></td></tr>
+<tr><td>中间件链（40+ 模块，核心链路 8 个）</td><td>每个横切关注点都要侵入主流程改一遍</td><td><code>agents/middlewares/</code></td></tr>
+<tr><td>长期记忆（跨 thread 事实，可换后端）</td><td>每次对话都从零开始认识用户</td><td><code>agents/memory/</code></td></tr>
+<tr><td>Projects（项目级 instructions 按 run 注入）</td><td>团队约定靠人肉复制粘贴</td><td><code>routers/*projects*</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.4 接入层：让 Agent 进得了人的工作流</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>能力</th><th>缺失后果</th><th>实现落点</th></tr></thead>
+<tbody>
+<tr><td>统一入口（Nginx <code>:2026</code>，<code>/api/langgraph/*</code> 改写）</td><td>前端直连多个后端，LangGraph SDK 还得单独起 server</td><td><code>docker/nginx.conf</code></td></tr>
+<tr><td>Web 工作台（Next.js）</td><td>只能自己写个聊天框 demo</td><td><code>frontend/src/</code></td></tr>
+<tr><td>终端 TUI（与 Web 共享 thread store）</td><td>开发者 / 运维场景没有入口</td><td><code>deerflow/tui/</code></td></tr>
+<tr><td>IM 通道（10 个适配器：飞书 / Slack / Telegram / Discord / 钉钉 / 企微 / 微信 / QQ / Buzz / GitHub）</td><td>「在群里 @ 一下就干活」要自己接</td><td><code>backend/app/channels/</code></td></tr>
+<tr><td>内嵌 Python 客户端（与 HTTP 同 schema）</td><td>批处理 / 离线任务还得绕一圈 HTTP</td><td><code>deerflow/client.py</code></td></tr>
+<tr><td>定时任务</td><td>「每周自动跑一次」要自己造调度器</td><td><code>app/scheduler/</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>2.5 生产层：能上线才算数</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>能力</th><th>缺失后果</th><th>实现落点</th></tr></thead>
+<tbody>
+<tr><td>鉴权（JWT / OIDC / PAT / session cookie / local）</td><td>内网 demo 都不敢放开</td><td><code>app/gateway/auth/</code></td></tr>
+<tr><td>持久化（SQLAlchemy 2.0 async + Alembic，27 个迁移；SQLite / PG / memory）</td><td>数据在内存里，重启即失</td><td><code>deerflow/persistence/</code></td></tr>
+<tr><td>配置系统（热加载 / restart-required 分级）</td><td>改个模型要重新发版</td><td><code>deerflow/config/</code></td></tr>
+<tr><td>可观测（TraceMiddleware + <code>X-Trace-Id</code> 唯一来源）</td><td>线上问题全靠猜</td><td><code>deerflow/trace_context.py</code></td></tr>
+<tr><td>测试门禁（后端 709 + 前端 213 + 50 个严格 blocking-I/O 用例）</td><td>重构一次崩一片</td><td><code>backend/tests/</code>、<code>frontend/tests/</code></td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="callout warn">
+  <div class="t">结论</div>
+  缺的不是「能不能调模型」，而是这一整张清单。
+</div>
+</section>
+
+<!-- 3 -->
+<section id="s3">
+<h2>3. 必要性论证：为什么这层值得专门做成一个产品</h2>
+
+<div class="card-grid">
+  <div class="card">
+    <div class="h">论据一 · 它是运行时，不是库</div>
+    <div class="d">库可以复制粘贴，运行时不行。B 层的本质是<b>跨进程状态管理</b>：run 生命周期、沙箱租约、checkpoint、流式事件桥接、并发排队。难点不在算法，在<b>分布式状态的一致性</b> —— 重启后谁接管、两个实例谁持锁、事件丢了怎么补。这类代码写错的表现是「偶发诡异 bug」，排查成本极高。</div>
+  </div>
+  <div class="card">
+    <div class="h">论据二 · 经济学：一次投入 vs N 次重复</div>
+    <div class="d">若要做多个 Agent 产品（内容生成、数据分析、运维助手、投研…），B 层会被重复实现 N 遍。DeerFlow 把它收敛成一份，并<b>用扩展点把差异外置</b>：领域能力 → Skill；复杂编排 → Sub-agent；请求级横切行为 → Middleware；路由 / 服务 / 生命周期 → Extension（契约 <code>deerflow_extension_api==0.2.1</code>）。</div>
+  </div>
+  <div class="card">
+    <div class="h">论据三 · 统一多入口，避免「一套 Agent、四套外壳」</div>
+    <div class="d">Web、TUI、IM、内嵌 SDK、定时任务、MCP 后台任务 —— 在 DeerFlow 里<b>全部收敛到同一条 run 路径</b>（<code>RunManager</code> → <code>run_agent()</code> → 同一中间件链）。加一个中间件，多个入口同时生效；修一个流式 bug，多个入口同时修好。</div>
+  </div>
+  <div class="card">
+    <div class="h">论据四 · 是「能交付的产品」，不是「能跑的 demo」</div>
+    <div class="d">开箱即有：统一入口 Web 工作台、终端 TUI、10 个 IM 通道、LangGraph 兼容 API（标准 SDK 客户端<b>无需独立 LangGraph server</b>）、Helm chart、Docker Compose。从「跑通一个 graph」到「发给用户用」，距离被压缩成配置。</div>
+  </div>
+  <div class="card">
+    <div class="h">论据五 · 可复用性有结构性保障</div>
+    <div class="d">harness 与 app 之间是<b>CI 强制的单向依赖</b>（<code>app</code> 可 import <code>deerflow</code>，反过来不行，由 <code>backend/tests/test_harness_boundary.py</code> 守护）。这条边界的意义就是：<b>harness 必须能脱离这个产品的外壳独立复用</b>。</div>
+  </div>
+</div>
+
+<div class="callout">
+  <div class="t">制度化的体现：Extension-first evaluation</div>
+  根 <code>AGENTS.md</code> 明确规定：实现新功能前先问「能不能做成扩展」，只有改 agent loop / memory / 上下文压缩 / 鉴权才动核心。目标是让<b>业务成为内核的租户，而不是内核的修改者</b>。
+</div>
+</section>
+
+<!-- 4 -->
+<section id="s4">
+<h2>4. 与 LangChain / LangGraph 的关系（澄清，避免误解）</h2>
+<div class="flow">┌──────────────────────────────────────────────┐
+│  C · 你的业务逻辑                              │
+│  skills / sub-agents / extensions / UI         │
+├──────────────────────────────────────────────┤
+│  B · DeerFlow Harness（本项目）                │
+│  沙箱 · 文件系统 · 记忆 · run 生命周期           │
+│  流式协议 · skills/MCP · sub-agent              │
+│  鉴权 · 多入口 · 调度 · 可观测 · 持久化           │
+├──────────────────────────────────────────────┤
+│  A · LangGraph + LangChain（上游依赖）          │
+│  图编排 · tool calling · model provider         │
+└──────────────────────────────────────────────┘</div>
+
+<ul>
+  <li><b>不是替代</b>：DeerFlow 依赖 <code>langgraph&gt;=1.2.9</code> 与 LangChain，去掉它们 DeerFlow 不成立。</li>
+  <li><b>是叠加</b>：它把「一次模型调用编排」拉成「一个可持续运行、可被多人多端使用的 Agent 运行时」。</li>
+  <li><b>判断标准</b>：要「一个能跑的 graph」→ 用 LangGraph；要「一个能交付给用户、能长期演进的 Agent 产品」→ 需要 B 层，即 DeerFlow。</li>
+</ul>
+</section>
+
+<!-- 5 -->
+<section id="s5">
+<h2>5. 诚实的边界：什么时候不该投入</h2>
+<p>这一节是为了让上面的论证可信 —— 只讲好处的定位说明是站不住的。</p>
+
+<h3>5.1 不该用的场景</h3>
+<ol>
+  <li>单轮问答 / 简单 RAG 聊天机器人 —— B 层对你全是负担。</li>
+  <li>完全不能接受 Agent 执行代码或写文件的环境 —— 虽可关闭 bash 与写权限，但那就把核心卖点关掉了。</li>
+  <li>只要一个固定流程的自动化脚本 —— 直接写 LangGraph 更轻。</li>
+</ol>
+
+<h3>5.2 必须计入的成本</h3>
+<div class="table-wrap">
+<table>
+<thead><tr><th>成本项</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>技术栈被钉死</td><td>LangGraph + FastAPI + Next.js 16 + React 19；不是自由选架构</td></tr>
+<tr><td>扩展契约强约束</td><td><code>deerflow_extension_api==0.2.1</code> 精确 pin，不可放宽</td></tr>
+<tr><td>架构边界是硬的</td><td>harness / app 单向依赖由 CI 守护，不能图省事反向引用</td></tr>
+<tr><td>安全面扩大</td><td>Agent 具备 bash 与文件写能力，部署不当即风险；需按需关闭权限、启用沙箱</td></tr>
+<tr><td>学习曲线</td><td>40+ 中间件、30+ 路由、709 个后端测试，理解成本不低</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<!-- 6 -->
+<section id="s6">
+<h2>6. 投资决策清单</h2>
+<div class="callout ok">
+  <div class="t">命中 ≥3 条：投入 DeerFlow 是划算的</div>
+</div>
+<ul class="checklist">
+  <li>Agent 需要<b>真的执行代码</b>或<b>真的产出文件</b>（不只是描述结果）</li>
+  <li>要有<b>超过一个</b>入口（Web + IM / Web + TUI / Web + 内嵌 SDK）</li>
+  <li>要接<b>外部工具生态</b>（MCP）或能力需要<b>热插拔</b>（skills）</li>
+  <li>任务<b>多步且长</b>，需要 sub-agent 拆解与上下文隔离</li>
+  <li>需要<b>跨会话记忆</b>或团队级上下文（Projects）</li>
+  <li>需要<b>定时 / 周期</b>自动执行</li>
+  <li>需要<b>多租户、鉴权、审计</b>等生产化能力</li>
+  <li>计划做<b>不止一个</b> Agent 产品，或要对外开放二次开发</li>
+</ul>
+<div class="callout warn">
+  <div class="t">命中 ≤1 条</div>
+  直接用 LangGraph + 少量自研即可，别引入这层复杂度。
+</div>
+</section>
+
+<!-- 7 -->
+<section id="s7">
+<h2>7. FAQ：预料中的质疑与回应</h2>
+
+<h3>Q1 · 直接用 LangGraph 不行吗？</h3>
+<p>行，但你要自己补完第 2 节那张清单。LangGraph 给你 <code>StateGraph</code>，不给沙箱、不给 skills 加载、不给 SSE 契约、不给鉴权、不给 Web UI。这些不是「锦上添花」，是「能不能上线」的分界线。</p>
+
+<h3>Q2 · 这些能力我们招人自己写不就行了？</h3>
+<p>可以，但请注意：这些是<b>与业务无关</b>的基础设施。把它们写进业务代码库，等于让每个产品团队都养一支基础设施小组；而且分布式状态、上下文压缩、沙箱安全这些是典型的「写得出、写不对」的领域。集中做一次 + 用扩展点开放差异，才是规模化的做法。</p>
+
+<h3>Q3 · 那为什么不用现成的低代码 Agent 平台？</h3>
+<p>那些平台解决的是「快速搭流程」，不解决「深度可控与二次开发」。DeerFlow 的差异在于：能力是<b>代码级可扩展</b>的（写 skill / sub-agent / middleware / extension，而非拖拽），并且可以<b>拆开改造成自己的产品</b>（README：<i>"Use it as-is. Or tear it apart and make it yours."</i>）。</p>
+
+<h3>Q4 · 投入这么大，产出怎么衡量？</h3>
+<p>用一个可验证的指标：<b>新增一个 Agent 产品时，非业务代码的占比</b>。在 DeerFlow 之上，这个占比应当趋近于 0（只写 skills / sub-agents / 配置）；如果趋近于 80%，说明这层基础设施没有真正复用起来。</p>
+</section>
+
+<!-- 8 -->
+<section id="s8">
+<h2>8. 事实来源与校准项</h2>
+<h3>8.1 事实来源</h3>
+<ul>
+  <li>定位原文：<code>README.md:1129-1139</code>（From Deep Research to Super Agent Harness）</li>
+  <li>架构分层：<code>docs/ARCHITECTURE.md</code>（Harness / App Split、中间件链 8 步）</li>
+  <li>仓库地图与热点文件：<code>notes/repository-map.html</code></li>
+  <li>扩展优先原则与边界约束：根 <code>AGENTS.md</code></li>
+</ul>
+
+<h3>8.2 需要自行校准的两处</h3>
+<div class="callout warn">
+  <div class="t">① 20% / 80% 是判断，不是实测</div>
+  第 0 节的「graph 只占 20%，剩下 80%」是按清单篇幅估的。对外讲之前，建议替换成你们做某个具体产品时的<b>实际工时分布</b>。
+</div>
+<div class="callout warn">
+  <div class="t">② 决策清单的权重可调整</div>
+  第 6 节清单的排序由本文给定，可按你们的真实业务重新排优先级与命中阈值。
+</div>
+</section>
+
+<footer>
+  产品定位说明 · 基于仓库只读探索整理 · 与 <code>notes/repository-map.html</code> 配套阅读。
+</footer>
+</main>
+</div>
+<script>
+  (function () {
+    var root = document.documentElement;
+    var btn = document.getElementById("theme-toggle");
+    var KEY = "repository-map-theme";
+
+    function currentTheme() {
+      var attr = root.getAttribute("data-theme");
+      if (attr === "light" || attr === "dark") return attr;
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+
+    function sync() {
+      var isDark = currentTheme() === "dark";
+      btn.textContent = isDark ? "浅色" : "深色";
+      btn.title = isDark ? "切换到浅色主题" : "切换到深色主题";
+      btn.setAttribute("aria-label", btn.title);
+    }
+
+    btn.addEventListener("click", function () {
+      var next = currentTheme() === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem(KEY, next); } catch (e) {}
+      sync();
+    });
+
+    sync();
+  })();
+</script>
+</body>
+</html>
