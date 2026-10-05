@@ -344,12 +344,13 @@ def test_python_subprocess_kwargs_unpacking_without_shell_key_still_blocks(tmp_p
     assert not [item for item in findings if item["rule_id"] == "python-subprocess"]
 
 
-def test_cloud_metadata_access_is_reported_by_one_rule(tmp_path: Path) -> None:
+@pytest.mark.parametrize("host", ["169.254.169.254", "metadata.google.internal", "METADATA.GOOGLE.INTERNAL", "Metadata.Google.Internal"])
+def test_cloud_metadata_access_is_reported_by_one_rule(tmp_path: Path, host: str) -> None:
     skill_dir = tmp_path / "demo-skill"
     _write_skill(skill_dir)
     scripts_dir = skill_dir / "scripts"
     scripts_dir.mkdir()
-    (scripts_dir / "run.py").write_text('import urllib.request\nurllib.request.urlopen("http://169.254.169.254/latest/meta-data/")\n', encoding="utf-8")
+    (scripts_dir / "run.py").write_text(f'import urllib.request\nurllib.request.urlopen("http://{host}/latest/meta-data/")\n', encoding="utf-8")
 
     findings = scan_skill_dir(skill_dir)["findings"]
 
@@ -1427,3 +1428,507 @@ def test_python_reverse_shell_via_create_connection_blocks(tmp_path: Path) -> No
 
     assert _finding_by_rule(result["findings"], "python-reverse-shell")["severity"] == "CRITICAL"
     assert result["blocked"] is True
+
+
+def _scan_python_sample(tmp_path: Path, source: str) -> list[dict]:
+    """Scan a minimal skill package whose only code file is one Python script."""
+    skill_dir = tmp_path / "demo-skill"
+    _write_skill(skill_dir)
+    scripts_dir = skill_dir / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "sample.py").write_text(source, encoding="utf-8")
+    return scan_skill_dir(skill_dir)["findings"]
+
+
+def _secret_assignments(findings: list[dict]) -> list[dict]:
+    return [finding for finding in findings if finding["rule_id"] == "secret-env-assignment"]
+
+
+def test_secret_assignment_ignores_python_bare_annotation(tmp_path: Path) -> None:
+    """`token: Optional[str]` names a parameter's type; it embeds no secret value."""
+    source = "from typing import Optional\n\n\nclass Client:\n    def __init__(self, token: Optional[str] = None):\n        self.token = token\n"
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_ignores_python_environment_lookup(tmp_path: Path) -> None:
+    """Reading the secret from the environment is the documented remediation, not a finding."""
+    source = 'import os\n\n\ndef load():\n    api_key = os.getenv("MINIMAX_API_KEY")\n    return api_key\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_still_flags_python_string_literal(tmp_path: Path) -> None:
+    """A hardcoded literal stays reported, and the value never reaches the finding."""
+    source = 'import os\n\n\ndef load():\n    api_key = "9f8e7d6c5b4a3210ff"\n    return api_key\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 5
+    assert finding["evidence"] == "[redacted]"
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_still_flags_annotated_python_literal(tmp_path: Path) -> None:
+    """An annotated assignment still embeds its literal, so it must stay reported."""
+    source = 'import os\n\n\ndef load():\n    password: str = "hunter2-literal"\n    return password\n'
+
+    assert _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")["line"] == 5
+
+
+def test_secret_assignment_still_flags_python_keyword_argument(tmp_path: Path) -> None:
+    """``connect(token="…")`` binds the literal just as firmly as ``token = "…"``.
+
+    The line-oriented sweep this rule replaced reported the keyword form, so the
+    AST path has to keep reporting it; a caller that only moved the assignment
+    into a call would otherwise walk out of a HIGH-severity gate.
+    """
+    source = 'client = connect("https://api.example", token="9f8e7d6c5b4a3210ff")\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert finding["evidence"] == "[redacted]"
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_still_flags_python_parameter_default(tmp_path: Path) -> None:
+    """A credential baked into a parameter default ships inside the skill."""
+    source = 'def load(api_key="9f8e7d6c5b4a3210ff"):\n    return api_key\n'
+
+    assert _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")["line"] == 1
+
+
+def test_secret_assignment_still_flags_python_lambda_parameter_default(tmp_path: Path) -> None:
+    """A credential baked into a ``lambda`` default binds as firmly as a ``def`` default.
+
+    The line-oriented sweep this rule replaced matched ``name=value`` and so reported the
+    lambda form too; ``_python_secret_bindings`` walked only ``def``/``async def`` defaults,
+    so moving the assignment into a lambda walked out of the gate.
+    """
+    source = 'handler = lambda api_key="9f8e7d6c5b4a3210ff": api_key\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert finding["evidence"] == "[redacted]"
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_still_flags_python_lambda_keyword_only_default(tmp_path: Path) -> None:
+    """The keyword-only lambda spelling binds the same literal and must stay reported."""
+    source = 'handler = lambda *, token="9f8e7d6c5b4a3210ff": token\n'
+
+    assert _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")["line"] == 1
+
+
+def test_secret_assignment_still_flags_python_walrus_binding(tmp_path: Path) -> None:
+    """``(token := "…")`` is an assignment written as an expression."""
+    source = 'if (secret := "9f8e7d6c5b4a3210ff"):\n    use(secret)\n'
+
+    assert _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")["line"] == 1
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'host, api_key = "internal", "9f8e7d6c5b4a3210ff"\n',
+        'host, api_key = "https://internal.example", "9f8e7d6c5b4a3210ff"\n',
+    ],
+)
+def test_secret_assignment_still_flags_python_tuple_unpacking(tmp_path: Path, source: str) -> None:
+    """``host, api_key = "internal", "…"`` binds the literal to ``api_key``.
+
+    The sweep reported that form (it matched the line and took the first quoted value),
+    so unpacking was a way to walk out of a HIGH-severity gate; ``_python_secret_assignment_target``
+    only understood a single target node. The second case goes further: there the sweep
+    took the URL as the value, read it as a placeholder and stayed silent too, so neither
+    implementation saw it.
+    """
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert finding["evidence"] == "[redacted]"
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_still_flags_python_list_target_unpacking(tmp_path: Path) -> None:
+    """A list target unpacks the same way a tuple target does; the brackets are syntax."""
+    source = '[token, version] = ["9f8e7d6c5b4a3210ff", 2]\n'
+
+    assert _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")["line"] == 1
+
+
+def test_secret_assignment_ignores_python_unpacking_of_environment_lookups(tmp_path: Path) -> None:
+    """The precision gain has to survive the unpacked form too.
+
+    ``api_key, url = os.getenv("K"), endpoint`` binds both values at runtime, so neither
+    is a literal this rule can assert on.
+    """
+    source = 'api_key, url = os.getenv("DEERFLOW_TOKEN"), "https://api.example"\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_still_flags_python_conditional_literal(tmp_path: Path) -> None:
+    """``api_key = "…" if prod else "x"`` ships the literal in the file."""
+    source = 'api_key = "9f8e7d6c5b4a3210ff" if prod else "x"\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'api_key = ["9f8e7d6c5b4a3210ff"]\n',
+        'api_key = ("https://internal.example", "9f8e7d6c5b4a3210ff")\n',
+        'api_key = {"live": "9f8e7d6c5b4a3210ff"}\n',
+    ],
+)
+def test_secret_assignment_still_flags_python_container_literal(tmp_path: Path, source: str) -> None:
+    """A credential inside a list, tuple or dict literal is still in the package."""
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_ignores_python_container_without_literal(tmp_path: Path) -> None:
+    """Only values Python resolves from source are asserted on: a container of runtime
+    data (a call, a variable) binds nothing this rule can name."""
+    source = 'api_key = [os.getenv("DEERFLOW_TOKEN"), token_from_config]\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+@pytest.mark.parametrize("key", ['"ghp_a1b2c3d4e5f6g7h8i9j0"', '"ghp_" + "a1b2c3d4e5f6g7h8i9j0"'])
+def test_secret_assignment_still_flags_python_dict_key_literal(tmp_path: Path, key: str) -> None:
+    """A mapping key needs credential evidence of its own: a known token format,
+    including one spelled as a concatenation of literals.
+
+    The key and the value are put on separate lines so the reported line says which of the
+    two was asserted on: a value-only reader would name line 3.
+    """
+    source = f'api_key = {{\n    {key}:\n        "live",\n}}\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 2
+    assert finding["evidence"] == "[redacted]"
+    assert "a1b2c3d4e5f6g7h8i9j0" not in repr(finding)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        'tokens = {"access_token": os.getenv("ACCESS_TOKEN"), "refresh_token": os.getenv("REFRESH_TOKEN")}\n',
+        'credentials = {"api_key": token_from_config, "password": config["password"]}\n',
+        'tokens = {"outer": {"access_token": os.environ["ACCESS_TOKEN"]}}\n',
+        'connect(tokens={"access_token": os.getenv("ACCESS_TOKEN")})\n',
+        'tokens = {("access_token", "refresh_token"): runtime_tokens}\n',
+        'api_key = {123456: os.getenv("API_KEY")}\n',
+        'tokens = {"9f8e7d6c5b4a3210ff": runtime_token}\n',
+    ],
+)
+def test_secret_assignment_ignores_python_mapping_labels_with_runtime_values(tmp_path: Path, source: str) -> None:
+    """Mapping labels do not become credentials because the enclosing name is secret-like."""
+    findings = _scan_python_sample(tmp_path, source)
+
+    assert [finding for finding in findings if finding["rule_id"].startswith("secret-")] == []
+
+
+@pytest.mark.parametrize("value", ['"9f8e7d6c5b4a3210ff"', 'os.getenv("ACCESS_TOKEN") if prod else "9f8e7d6c5b4a3210ff"'])
+def test_secret_assignment_reports_python_mapping_credential_value(tmp_path: Path, value: str) -> None:
+    """A label must neither hide a hardcoded value nor take its source location."""
+    source = f'tokens = {{\n    "access_token":\n        {value},\n}}\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 3
+    assert finding["severity"] == "HIGH"
+    assert finding["evidence"] == "[redacted]"
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_reports_python_container_members_in_source_order(tmp_path: Path) -> None:
+    """Two literals in one container point at the first one written, so the finding's
+    location does not depend on how the value expression happens to be traversed."""
+    source = 'api_key = [\n    "9f8e7d6c5b4a3210ff",\n    "7d6c5b4a3210ff9e8",\n]\n'
+
+    assert _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")["line"] == 2
+
+
+def test_secret_assignment_still_flags_python_starred_target_prefix(tmp_path: Path) -> None:
+    """``api_key, *rest = "…", "b"`` binds ``api_key`` to the first element: the star only
+    absorbs the tail, so the prefix keeps its fixed position."""
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, 'api_key, *rest = "9f8e7d6c5b4a3210ff", "b"\n'), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert finding["evidence"] == "[redacted]"
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_starred_element_value_stays_unreported(tmp_path: Path) -> None:
+    """The mirror case of the one above: here the credential lands in ``rest``, a list
+    Python builds at runtime, so no name on that line has a fixed position for it.
+    Pinned so the limitation is checked, not assumed."""
+    source = 'mode, *rest = "prod", "9f8e7d6c5b4a3210ff"\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_still_flags_python_starred_value_suffix(tmp_path: Path) -> None:
+    """``mode, api_key = *pair, "…"`` aligns from the right: the element after the star is
+    the last one, so it reaches the last name whatever the starred sequence's length is."""
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, 'mode, api_key = *pair, "9f8e7d6c5b4a3210ff"\n'), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert finding["evidence"] == "[redacted]"
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_star_on_both_sides_stays_unreported(tmp_path: Path) -> None:
+    """With a star on both sides the head and the tail can be read, but neither name in
+    ``api_key, *rest`` has a position that matches the literal on the right. Pinned so the
+    limitation is checked, not assumed."""
+    source = 'api_key, *rest = *pair, "9f8e7d6c5b4a3210ff"\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_value_star_on_the_last_name_stays_unreported(tmp_path: Path) -> None:
+    """``api_key, mode = *pair, "…"`` does pair the literal, with ``mode``: the credential
+    reaches a name this rule is not about, so nothing is reported."""
+    source = 'api_key, mode = *pair, "9f8e7d6c5b4a3210ff"\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_still_flags_python_nested_unpacking(tmp_path: Path) -> None:
+    """A parenthesised target element unpacks positionally too, so the credential reaches
+    the name written at its own position rather than the tuple around it."""
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, 'host, (user, api_key) = "https://internal.example", ("u", "9f8e7d6c5b4a3210ff")\n'), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert "9f8e7d6c5b4a3210ff" not in repr(finding)
+
+
+def test_secret_assignment_unpacking_with_mismatched_lengths_stays_unreported(tmp_path: Path) -> None:
+    """``host, api_key = "a", "b", "c"`` cannot run at all, so there is no position to read
+    the literal from. Pinned together with a second assignment because the pairing builds
+    tuples elementwise: a mismatch must skip its own line, not raise and cost the file its
+    other findings.
+    """
+    source = 'host, api_key = "9f8e7d6c5b4a3210ff", "b", "c"\ntoken = "7d6c5b4a3210ff9e8"\n'
+
+    findings = _secret_assignments(_scan_python_sample(tmp_path, source))
+
+    assert [finding["line"] for finding in findings] == [2]
+
+
+def test_secret_assignment_ignores_python_keyword_environment_lookup(tmp_path: Path) -> None:
+    """The precision gain must survive the new binding forms: a keyword whose
+    value is read from the environment is the documented remediation."""
+    source = 'import os\n\n\ndef load():\n    return connect("https://api.example", token=os.getenv("DEERFLOW_TOKEN"))\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_still_flags_python_literal_concatenation(tmp_path: Path) -> None:
+    """``API_KEY = "sk-" + "a1b2c3d4e5f6"`` binds a constant, and the sweep saw it."""
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, 'API_KEY = "sk-" + "a1b2c3d4e5f6"\n'), "secret-env-assignment")
+
+    assert finding["line"] == 1
+    assert finding["evidence"] == "[redacted]"
+    assert "a1b2c3d4e5f6" not in repr(finding)
+
+
+def test_secret_assignment_flags_python_literal_chain_that_parses_but_recurses(tmp_path: Path) -> None:
+    """A long ``+`` chain is valid Python, so folding it must not reach the recursion limit.
+
+    An analyzer exception is caught per file and discards that file's findings, so a
+    chain deep enough to blow the stack silences every rule for the whole file.
+    """
+    source = 'token = os.getenv("DEERFLOW_TOKEN")\nAPI_KEY = ' + " + ".join(['"a1b2c3d4e5f6"'] * 1000) + "\n"
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 2
+
+
+def test_secret_assignment_still_flags_python_placeholder_free_fstring(tmp_path: Path) -> None:
+    """An f-string with no interpolated field is a literal written oddly."""
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, 'password = f"hunter2-literal"\n'), "secret-env-assignment")
+
+    assert finding["line"] == 1
+
+
+def test_secret_assignment_ignores_python_runtime_composed_value(tmp_path: Path) -> None:
+    """Only fully constant values fold; half of this one comes from the host."""
+    source = 'import os\n\napi_key = os.environ["DEERFLOW_KEY"] + "a1b2c3d4e5f6"\n'
+
+    assert _secret_assignments(_scan_python_sample(tmp_path, source)) == []
+
+
+def test_secret_assignment_still_flags_non_python_text(tmp_path: Path) -> None:
+    """Non-Python text keeps the line-oriented sweep for config and shell files."""
+    skill_dir = tmp_path / "demo-skill"
+    _write_skill(skill_dir)
+    scripts_dir = skill_dir / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "deploy.sh").write_text("#!/bin/sh\nPASSWORD=hunter2-literal\n", encoding="utf-8")
+
+    finding = _finding_by_rule(scan_skill_dir(skill_dir)["findings"], "secret-env-assignment")
+
+    assert finding["file"] == "scripts/deploy.sh"
+    assert finding["line"] == 2
+
+
+def test_secret_assignment_survives_syntax_error_in_python(tmp_path: Path) -> None:
+    """A syntax error must not silence this rule for the whole file.
+
+    ``ast.parse`` rejects the file, so the rule has to fall back to the text sweep.
+    Otherwise appending one syntax error disables a HIGH-severity rule for an entire
+    file that ``main`` still scanned.
+    """
+    source = 'def broken(:\n    api_key = "9f8e7d6c5b4a3210ff"\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["line"] == 2
+    assert finding["evidence"] == "[redacted]"
+
+
+def test_secret_assignment_survives_nul_byte_in_python(tmp_path: Path) -> None:
+    """``ast.parse`` also rejects NUL bytes, so that path needs the same fallback."""
+    source = 'import os\napi_key = "9f8e7d6c5b4a3210ff"\x00\n'
+
+    finding = _finding_by_rule(_scan_python_sample(tmp_path, source), "secret-env-assignment")
+
+    assert finding["file"] == "scripts/sample.py"
+
+
+def test_bundled_public_skill_scripts_report_no_secret_assignment() -> None:
+    """Bundled skill scripts must not fail the review gate on an unchanged checkout (#4996).
+
+    Scoped to ``.py`` files on purpose: ``SKILL.md`` inside ``evals/fixtures`` is deliberately
+    hostile review material that the reviewer withholds from SkillScan, and declaration
+    scanning of real ``SKILL.md`` prose is governed by a separate rule.
+    """
+    skills_public_dir = Path(__file__).resolve().parents[2] / "skills" / "public"
+    offenders: dict[str, list[tuple[str | None, int | None]]] = {}
+    for skill_dir in sorted(path for path in skills_public_dir.iterdir() if path.is_dir()):
+        hits = [finding for finding in _secret_assignments(scan_skill_dir(skill_dir)["findings"]) if (finding["file"] or "").endswith(".py")]
+        if hits:
+            offenders[skill_dir.name] = [(finding["file"], finding["line"]) for finding in hits]
+
+    assert offenders == {}
+
+
+@pytest.mark.parametrize(
+    "url, host",
+    [
+        ("http://LOCALHOST:8080/api", "localhost"),
+        ("http://[::1]/api", "::1"),
+        ("https://[::1]:8443/api", "::1"),
+        ("http://[2001:DB8::1]:8080/api", "2001:db8::1"),
+        ("http://user@[::1]:8080/api", "::1"),
+        ("http://[::1]@Example.COM/api", None),
+        ("http://localhost@Example.COM/api", "example.com"),
+        ("http://[::1/api", None),
+        ("ftp://LOCALHOST/api", None),
+    ],
+)
+def test_http_host_normalizes_case_and_ipv6(url: str, host: str | None) -> None:
+    from deerflow.skills.skillscan.orchestrator import _http_host
+
+    assert _http_host(url) == host
+
+
+def test_uppercase_local_host_is_classified_local(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "skill"
+    _write_skill(skill_dir)
+    (skill_dir / "run.py").write_text(
+        'import urllib.request\nurllib.request.urlopen("http://LOCALHOST:8080/config")\n',
+        encoding="utf-8",
+    )
+    findings = scan_skill_dir(skill_dir)["findings"]
+    assert _finding_by_rule(findings, "network-local-http")
+    assert not [finding for finding in findings if finding["rule_id"] == "network-cleartext-http"]
+
+
+@pytest.mark.parametrize("host, external", [("localhost", False), ("LOCALHOST", False), ("LocalHost", False), ("Example.COM", True), ("[::1]", False), ("[2001:DB8::1]", True), ("localhost@Example.COM", True)])
+def test_declared_http_host_case_classification(tmp_path: Path, host: str, external: bool) -> None:
+    skill_dir = tmp_path / "skill"
+    _write_skill(skill_dir, f"Endpoint: http://{host}:8080/api\n")
+
+    findings = scan_skill_dir(skill_dir)["findings"]
+
+    assert bool([finding for finding in findings if finding["rule_id"] == "declaration-external-endpoint"]) is external
+    assert bool([finding for finding in findings if finding["rule_id"] == "network-local-http"]) is (not external)
+
+
+@pytest.mark.parametrize("host, external", [("localhost", False), ("LOCALHOST", False), ("LocalHost", False), ("Example.COM", True), ("[::1]", False), ("[2001:DB8::1]", True), ("[::1]@Example.COM", True)])
+def test_sensitive_path_http_host_case_classification(tmp_path: Path, host: str, external: bool) -> None:
+    skill_dir = tmp_path / "skill"
+    _write_skill(skill_dir)
+    (skill_dir / "run.py").write_text(f'ENDPOINT = "http://{host}:8080/api"\nopen("/etc/passwd").read()\n', encoding="utf-8")
+
+    result = scan_skill_dir(skill_dir)
+    findings = result["findings"]
+
+    if external:
+        assert _finding_by_rule(findings, "python-sensitive-exfil")["severity"] == "CRITICAL"
+    else:
+        assert _finding_by_rule(findings, "python-sensitive-path-read")["severity"] == "HIGH"
+        assert not [finding for finding in findings if finding["rule_id"] == "python-sensitive-exfil"]
+    assert result["blocked"] is external
+
+
+@pytest.mark.parametrize(
+    "url, local",
+    [
+        ("http://[::1]:8080/api", True),
+        ("http://[::1]", True),
+        ("http://[::1]?mode=local", True),
+        ("http://[2001:DB8::1]:8080/api", False),
+        ("http://[2001:db8::1]", False),
+    ],
+)
+def test_ipv6_cleartext_http_classification(tmp_path: Path, url: str, local: bool) -> None:
+    skill_dir = tmp_path / "skill"
+    _write_skill(skill_dir, f"# Demo\nEndpoint: {url}\n")
+
+    findings = scan_skill_dir(skill_dir)["findings"]
+
+    rule_id = "network-local-http" if local else "network-cleartext-http"
+    finding = _finding_by_rule(findings, rule_id)
+    assert finding["file"] == "SKILL.md"
+    assert finding["line"] == 7
+    other_rule = "network-cleartext-http" if local else "network-local-http"
+    assert not [item for item in findings if item["rule_id"] == other_rule]
+
+
+def test_malformed_ipv6_url_remains_outbound(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "skill"
+    _write_skill(skill_dir)
+    (skill_dir / "run.py").write_text('ENDPOINT = "http://[::1/api"\nopen("/etc/passwd").read()\n', encoding="utf-8")
+
+    result = scan_skill_dir(skill_dir)
+
+    assert _finding_by_rule(result["findings"], "python-sensitive-exfil")["severity"] == "CRITICAL"
+    assert result["blocked"]
+    assert result["scanner_errors"] == []
+
+
+def test_cleartext_http_uses_host_after_userinfo_without_exposing_credentials(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "skill"
+    _write_skill(skill_dir, "Endpoint: http://localhost:private-value@Example.COM:8080/api\n")
+
+    findings = scan_skill_dir(skill_dir)["findings"]
+
+    finding = _finding_by_rule(findings, "network-cleartext-http")
+    assert finding["evidence"] == "http://Example.COM:8080/"
+    assert not [item for item in findings if item["rule_id"] == "network-local-http"]

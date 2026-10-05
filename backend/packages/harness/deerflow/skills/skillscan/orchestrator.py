@@ -21,6 +21,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
+from urllib.parse import urlsplit
 
 from deerflow.skills.package_files import is_code_file, is_executable_binary_prefix
 from deerflow.skills.package_paths import is_eval_fixture_skill_md
@@ -114,8 +115,27 @@ _HIDDEN_SENSITIVE_FILES = {
     "config",
 }
 _PLACEHOLDER_VALUES = {"", "x", "xx", "xxx", "xxxx", "changeme", "change-me", "example", "placeholder", "test", "dummy", "your-key", "<your-key>"}
+# `name[:=]value` sweep for line-oriented text (config, shell, YAML, Markdown). Python is
+# analyzed from its AST instead, because a regex cannot tell an annotation from a value.
+# The key may be quoted, so that JSON (`{"api_key": "..."}`) reads the same as the YAML,
+# `.env`, `.ini` and shell spellings of the same binding.
+# The leading guard is "not preceded by an alphanumeric" rather than `\b`: a separator
+# may introduce the credential word (`access_token`, `client_secret`, `MY_API_KEY`),
+# which `\b` cannot match because `_` is a word character. A run of letters before the
+# word (`tokenizer`, `secretive`) still stays quiet, so this is not a blanket match.
+_SECRET_ASSIGNMENT_RE = re.compile(r"(?im)(?<![A-Za-z0-9])(token|password|passwd|api[_-]?key|secret|credential)s?\b[\"']?\s*[:=]\s*[\"']?([^\"'\s#]+)")
+_SECRET_ASSIGNMENT_NAME_RE = re.compile(r"(?i)^(?:token|password|passwd|api[_-]?key|secret|credential)s?$")
+_SECRET_TOKEN_PATTERNS = tuple(
+    re.compile(pattern)
+    for pattern in (
+        r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b",
+        r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b",
+        r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b",
+        r"\bsk-[A-Za-z0-9]{20,}\b",
+    )
+)
 _SENSITIVE_PATH_RE = re.compile(r"(~/.ssh|/etc/passwd|/etc/shadow|/var/run/docker\.sock|docker\.sock|169\.254\.169\.254)")
-_EXTERNAL_HTTP_RE = re.compile(r"http://([A-Za-z0-9.-]+)(?::\d+)?(?:/|\b)")
+_EXTERNAL_HTTP_RE = re.compile(r"http://(?:[^/?#\s)'\"<>]*@)?(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::\d+)?(?:/|\b|(?=$|[\s)'\"<>?#]))")
 _URL_RE = re.compile(r"https?://[^\s)'\"<>]+")
 _LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 # `rm` with a recursive flag (any order/combination, optional --no-preserve-root)
@@ -126,6 +146,25 @@ _DESTRUCTIVE_RM_RE = (
     r"(?:-\S+\s+|--no-preserve-root\s+)*"
     r"/(?:\*|\s|$|(?:bin|boot|dev|etc|home|lib|lib64|opt|proc|root|run|sbin|srv|sys|usr|var)(?:/\*?)?(?:\s|$))"
 )
+# `env`, `printenv` and `export -p` dump the environment only when they run as a
+# command: at the start of a line, right after a `;`, `&`, `|`, `(`, `)` or
+# backtick separator, after the `{` that opens a brace group (`{ env; }`, which
+# bash requires to be followed by whitespace), or after a reserved word that must
+# introduce a command (`then`, `do`, `exec`, ...). An `NAME=value` assignment
+# prefix may come first. Anywhere else the word names something else -- a path in
+# `#!/usr/bin/env bash`, a host in `https://env.example.com`, a flag in
+# `--env FOO=1`, an argument in `echo env`, a variable in `${env}`, or comment
+# text in `# export -p` -- and dumps nothing. The text this is matched against is
+# first reduced to shell code by `_shell_code_only`, so a `;` inside a comment and
+# a command-looking line inside a heredoc body do not count either.
+_SHELL_ENV_DUMP_RE = re.compile(
+    r"(?m)(?:^|(?<=[;&|()`])|\{(?=[ \t])|(?<![\w/.-])(?:if|then|elif|else|while|until|do|exec)\b[ \t]+)"
+    r"[ \t]*(?:[A-Za-z_]\w*=[^ \t]*[ \t]+)*(?P<cmd>env\b|printenv\b|export[ \t]+-p\b)"
+)
+# The head of a heredoc redirection: `<<` or `<<-`, an optional quoted delimiter,
+# then the delimiter word. Requiring a leading letter/underscore keeps arithmetic
+# shifts such as `$((1 << 2))` from being read as a heredoc opener.
+_HEREDOC_HEAD_RE = re.compile(r"<<(-?)[ \t]*([\"']?)([A-Za-z_]\w*)\2")
 
 
 def skill_scan_enabled(app_config: Any | None = None) -> bool:
@@ -311,25 +350,264 @@ def _scan_secrets(rel_path: str, text: str) -> list[SecurityFinding]:
     if private_key:
         findings.append(_finding_from_match("secret-private-key", rel_path, text, private_key))
 
-    token_patterns = [
-        r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b",
-        r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b",
-        r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b",
-        r"\bsk-[A-Za-z0-9]{20,}\b",
-    ]
-    for pattern in token_patterns:
-        match = re.search(pattern, text)
+    for pattern in _SECRET_TOKEN_PATTERNS:
+        match = pattern.search(text)
         if match and not _looks_like_placeholder(match.group(0)):
             findings.append(_finding_from_match("secret-cloud-token", rel_path, text, match))
             break
 
-    assignment_re = re.compile(r"(?im)\b(token|password|passwd|api[_-]?key|secret|credential)s?\b\s*[:=]\s*[\"']?([^\"'\s#]+)")
-    for match in assignment_re.finditer(text):
+    if _is_python_path(rel_path, text):
+        findings.extend(_scan_python_secret_assignments(rel_path, text))
+        return findings
+
+    findings.extend(_scan_secret_assignments_by_text(rel_path, text))
+    return findings
+
+
+def _scan_secret_assignments_by_text(rel_path: str, text: str) -> list[SecurityFinding]:
+    """``name[:=]value`` sweep for line-oriented text, and for Python that will not parse."""
+    for match in _SECRET_ASSIGNMENT_RE.finditer(text):
         value = match.group(2).strip()
         if not _looks_like_placeholder(value):
-            findings.append(_finding_from_match("secret-env-assignment", rel_path, text, match))
-            break
-    return findings
+            return [_finding_from_match("secret-env-assignment", rel_path, text, match)]
+    return []
+
+
+def _python_secret_assignment_target(node: ast.expr) -> str | None:
+    """Final identifier bound by a simple assignment target, else None."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+        return node.slice.value
+    return None
+
+
+def _python_secret_unpacked_span(elts: list[ast.expr]) -> tuple[int, int, bool]:
+    """Fixed head, fixed tail and star presence of one side of an unpacking.
+
+    Python aligns everything before the first ``*`` and everything after the last one; only
+    the elements between stars share a runtime-determined slice. A side without a star has
+    its whole length fixed, so its head is every element and its tail is none.
+    """
+    stars = [index for index, element in enumerate(elts) if isinstance(element, ast.Starred)]
+    if not stars:
+        return len(elts), 0, False
+    return stars[0], len(elts) - stars[-1] - 1, True
+
+
+def _python_secret_unpacked_pairs(target: ast.expr, value: ast.expr) -> list[tuple[ast.expr, ast.expr]] | None:
+    """Target-and-value pairs of an unpacking assignment, or None when it is not one.
+
+    ``host, api_key = endpoint, "…"`` binds each name to the value written in the same
+    position, so the two sides have to be read together. Pairs come only from the fixed
+    head and tail of the two element lists (``_python_secret_unpacked_span``): what falls
+    between two stars is a runtime slice. An unpacking with no star on either side binds
+    only when the lengths match, so a mismatch -- which raises before binding anything --
+    contributes none. Nested targets align positionally too, so they are read the same way.
+    """
+    if not isinstance(target, (ast.Tuple, ast.List)):
+        return None
+    if not isinstance(value, (ast.Tuple, ast.List)):
+        return []
+    target_head, target_tail, target_starred = _python_secret_unpacked_span(target.elts)
+    value_head, value_tail, value_starred = _python_secret_unpacked_span(value.elts)
+    if not target_starred and not value_starred:
+        if len(target.elts) != len(value.elts):
+            return []
+        head, tail = len(target.elts), 0
+    else:
+        # A star-free side is fully fixed, so its tail is whatever its head did not consume.
+        head = min(target_head, value_head)
+        tail = min(len(target.elts) - head if not target_starred else target_tail, len(value.elts) - head if not value_starred else value_tail)
+    pairs = list(zip(target.elts[:head], value.elts[:head], strict=True))
+    if tail:
+        pairs += list(zip(target.elts[len(target.elts) - tail :], value.elts[len(value.elts) - tail :], strict=True))
+    expanded: list[tuple[ast.expr, ast.expr]] = []
+    for paired_target, paired_value in pairs:
+        nested = _python_secret_unpacked_pairs(paired_target, paired_value)
+        expanded.extend(nested or [(paired_target, paired_value)])
+    return expanded
+
+
+def _python_secret_bindings(tree: ast.AST) -> list[tuple[str | None, ast.expr]]:
+    """Every ``(bound name, value expression)`` pair the tree binds, in walk order.
+
+    Assignment statements are not the only place a skill can park a credential:
+    a keyword argument, a parameter default and a walrus all read as
+    ``name=value`` to the line-oriented sweep this rule replaced, so a caller
+    that merely moves the assignment into a call escapes the gate. An unpacking
+    assignment reads the same way once its targets are paired with values.
+    """
+    bindings: list[tuple[str | None, ast.expr]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                pairs = _python_secret_unpacked_pairs(target, node.value)
+                if pairs is None:
+                    bindings.append((_python_secret_assignment_target(target), node.value))
+                    continue
+                bindings.extend((_python_secret_assignment_target(paired_target), paired_value) for paired_target, paired_value in pairs)
+        elif isinstance(node, (ast.AnnAssign, ast.NamedExpr)):
+            # A bare annotation binds no value at all, so ``AnnAssign.value`` is None.
+            bindings.append((_python_secret_assignment_target(node.target), node.value))
+        elif isinstance(node, ast.keyword):
+            # ``**spread`` carries ``arg=None`` and binds no name of its own.
+            if node.arg is not None:
+                bindings.append((node.arg, node.value))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            params = [*node.args.posonlyargs, *node.args.args]
+            if node.args.defaults:
+                # Positional defaults align with the trailing parameters.
+                bindings.extend((param.arg, default) for param, default in zip(params[len(params) - len(node.args.defaults) :], node.args.defaults, strict=True))
+            bindings.extend((param.arg, default) for param, default in zip(node.args.kwonlyargs, node.args.kw_defaults, strict=True) if default is not None)
+    return bindings
+
+
+def _python_secret_literal(expr: ast.expr) -> str | None:
+    """Text of a value Python resolves from source alone, else None.
+
+    The pre-AST sweep reported a hardcoded credential that was spelled as a
+    concatenation of literals (``API_KEY = "sk-" + "a1b2c3d4"``), because its
+    line-oriented value capture stopped at the first closing quote. Splitting
+    the quotes is not obfuscation: the bound value is still the same constant,
+    so the shapes the sweep saw stay visible here - a literal, an explicit
+    ``+`` of literals, an implicit (adjacent) literal run, and a placeholder-free
+    f-string. Anything that needs runtime data - a call, a variable,
+    ``%``-formatting of a template - is not a literal this rule can assert on.
+    """
+    texts: list[str] = []
+    for part in _python_secret_literal_parts(expr):
+        text = _python_secret_literal_atom(part)
+        if text is None:
+            return None
+        texts.append(text)
+    return "".join(texts)
+
+
+def _python_secret_literal_parts(expr: ast.expr) -> list[ast.expr]:
+    """Operands of a concatenation, in source order; a single node for anything else.
+
+    A stack loop rather than recursion: the caller reports a finding from this
+    value, and a chain deep enough to pass the recursion limit would raise past
+    the per-file analyzer guard, which drops every other finding for that file.
+    """
+    stack: list[ast.expr] = [expr]
+    parts: list[ast.expr] = []
+    while stack:
+        node = stack.pop()
+        if not (isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add)):
+            parts.append(node)
+            continue
+        # Right goes on first so the left operand is collected first: a
+        # concatenation reads in source order however it is parenthesised.
+        stack.append(node.right)
+        stack.append(node.left)
+    return parts
+
+
+def _python_secret_literal_atom(node: ast.expr) -> str | None:
+    if isinstance(node, ast.Constant):
+        value = node.value
+        if not isinstance(value, (str, bytes, int)):
+            return None
+        return value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
+    if isinstance(node, ast.JoinedStr):
+        parts: list[str] = []
+        for part in node.values:
+            if not isinstance(part, ast.Constant) or not isinstance(part.value, str):
+                return None
+            parts.append(part.value)
+        return "".join(parts)
+    return None
+
+
+def _python_secret_literal_members(expr: ast.expr) -> list[ast.expr]:
+    """Values held inside a container or a conditional, in the order they are written.
+
+    ``api_key = ["…"]``, ``api_key = {"live": "…"}`` and ``api_key = "…" if prod else
+    "…"`` are each a finding for the line-oriented sweep this rule replaced: its value
+    capture stops at the first quote after the name, so it reports the line even when the
+    token it grabbed is only a bracket. This names the literal instead of the bracket.
+    Each member is asserted on by itself, because joining a container's members would
+    describe a string that no Python program ever binds.
+
+    Mapping keys are structural labels, so they need independent evidence from a
+    recognized token format; the enclosing secret-like name is evidence only for values.
+    """
+    if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
+        return list(expr.elts)
+    if isinstance(expr, ast.Dict):
+        # A ``{**spread}`` entry carries a None key and names nothing of its own.
+        members: list[ast.expr] = []
+        for key, value in zip(expr.keys, expr.values, strict=True):
+            if key is not None:
+                literal = _python_secret_literal(key)
+                if literal is not None and any(pattern.search(literal) for pattern in _SECRET_TOKEN_PATTERNS):
+                    members.append(key)
+            members.append(value)
+        return members
+    if isinstance(expr, ast.IfExp):
+        return [expr.body, expr.orelse]
+    return []
+
+
+def _python_secret_literal_candidates(expr: ast.expr) -> list[tuple[ast.expr, str]]:
+    """Every ``(node, literal)`` pair this binding can assert on, in source order.
+
+    A concatenation yields the whole value, because ``"sk-" + "a1b2"`` binds one
+    string; a container or a conditional yields its members. A work list rather than
+    recursion, matching ``_python_secret_literal_parts``: an expression tree holds each
+    node once, so a node queued from its parent is never queued again.
+    """
+    candidates: list[tuple[ast.expr, str]] = []
+    pending: list[ast.expr] = [expr]
+    while pending:
+        node = pending.pop()
+        literal = _python_secret_literal(node)
+        if literal is not None:
+            candidates.append((node, literal))
+            continue
+        pending.extend(_python_secret_literal_members(node))
+    candidates.sort(key=lambda candidate: (candidate[0].lineno, candidate[0].col_offset))
+    return candidates
+
+
+def _scan_python_secret_assignments(rel_path: str, text: str) -> list[SecurityFinding]:
+    """Report embedded Python secrets from real literal bindings, not from raw text.
+
+    A line-oriented sweep cannot tell an annotation (``token: Optional[str]``), a
+    statement colon (``if not api_key:``), or this rule's own remediation
+    (``api_key = os.getenv("X")``) from a literal, and it points at an annotated
+    assignment's annotation rather than at its value.
+
+    ``_python_secret_bindings`` preserves the sweep's binding forms, and
+    ``_python_secret_literal_candidates`` covers literal values inside containers
+    and conditionals. Mapping labels do not inherit credential evidence from the
+    enclosing name; only keys matching a recognized token format are candidates.
+
+    A file Python cannot parse falls back to that sweep: the AST is only an
+    improvement, and returning nothing would let one syntax error (or a NUL byte)
+    silence a HIGH-severity rule for the whole file. That sweep reads the run of
+    characters that follows ``name[:=]``, so it never reaches a credential an earlier
+    element of the same line precedes (``host, api_key = "https://…", "…"``) or a bracket
+    separates from its name (``[token, version] = ["…", 2]``): those two shapes are
+    reported while the file parses and go quiet once it carries a syntax error.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return _scan_secret_assignments_by_text(rel_path, text)
+
+    for name, value in _python_secret_bindings(tree):
+        if not _SECRET_ASSIGNMENT_NAME_RE.match(name or ""):
+            continue
+        for node, literal in _python_secret_literal_candidates(value):
+            if _looks_like_placeholder(literal):
+                continue
+            return [_finding_for_node("secret-env-assignment", rel_path, node, literal)]
+    return []
 
 
 def _scan_declaration(rel_path: str, text: str) -> list[SecurityFinding]:
@@ -434,6 +712,72 @@ def _scan_python(rel_path: str, text: str) -> list[SecurityFinding]:
     return findings
 
 
+def _split_shell_line(line: str) -> tuple[str, list[tuple[str, bool]]]:
+    """Split one shell line into its code part and the heredocs it declares.
+
+    Quote-aware: a `#` outside quotes starts a comment only at a word start, and
+    `<<` outside quotes opens a heredoc. Returns the code text (comment stripped)
+    together with the `(delimiter, strip_tabs)` pairs the line opens.
+
+    A `{` or `}` immediately before the `#` is not a word start: bash reads
+    `${#HOME}` as the length operator and `}#` as part of a word, while a brace
+    group needs the space of `{ # ...`. Those two characters are therefore left
+    out of the set that admits a comment.
+    """
+    heredocs: list[tuple[str, bool]] = []
+    in_single = in_double = False
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if in_single:
+            in_single = ch != "'"
+        elif in_double:
+            if ch == "\\":
+                i += 2
+                continue
+            in_double = ch != '"'
+        elif ch == "\\":
+            i += 2
+            continue
+        elif ch == "'":
+            in_single = True
+        elif ch == '"':
+            in_double = True
+        elif ch == "#" and (i == 0 or line[i - 1] in " \t;&|()<>"):
+            return line[:i], heredocs
+        elif ch == "<" and line.startswith("<<", i) and not line.startswith("<<<", i) and (i == 0 or not (line[i - 1].isalnum() or line[i - 1] == "_")):
+            if head := _HEREDOC_HEAD_RE.match(line, i):
+                heredocs.append((head.group(3), head.group(1) == "-"))
+                i = head.end()
+                continue
+        i += 1
+    return line, heredocs
+
+
+def _shell_code_only(text: str) -> str:
+    """Blank out comment text and heredoc bodies, preserving line structure.
+
+    `_SHELL_ENV_DUMP_RE` matches at a command position, but a `;` inside a
+    comment (`# documentation; env is only an example`) and a bare `env` line
+    inside heredoc data are not commands. Replacing them with blanks -- one
+    output line per input line, so `_line_number` stays correct -- leaves the
+    matcher looking only at shell code.
+    """
+    lines: list[str] = []
+    pending: list[tuple[str, bool]] = []
+    for raw in text.split("\n"):
+        if pending:
+            delimiter, strip_tabs = pending[0]
+            if (raw.lstrip("\t") if strip_tabs else raw) == delimiter:
+                pending.pop(0)
+            lines.append("")
+            continue
+        code, heredocs = _split_shell_line(raw)
+        pending.extend(heredocs)
+        lines.append(code)
+    return "\n".join(lines)
+
+
 def _scan_shell(rel_path: str, text: str) -> list[SecurityFinding]:
     findings: list[SecurityFinding] = []
     # Unmistakable reverse-shell signals hard-block; weaker idioms (bash -i,
@@ -448,23 +792,29 @@ def _scan_shell(rel_path: str, text: str) -> list[SecurityFinding]:
         findings.append(_finding_from_match("shell-curl-pipe-shell", rel_path, text, match))
     if match := re.search(_DESTRUCTIVE_RM_RE + r"|:\(\)\{\s*:\|:&\s*\};:|dd\s+[^#\n]*\bof=/dev/", text):
         findings.append(_finding_from_match("shell-destructive-command", rel_path, text, match))
-    if match := re.search(r"\b(env|printenv|export\s+-p)\b", text):
-        findings.append(_finding_from_match("shell-env-dump", rel_path, text, match))
+    # Only a command position counts, and only in shell code: see `_shell_code_only`.
+    code = _shell_code_only(text)
+    if match := _SHELL_ENV_DUMP_RE.search(code):
+        findings.append(_finding("shell-env-dump", file=rel_path, line=_line_number(code, match.start("cmd")), evidence=match.group("cmd")))
     return findings
 
 
 def _scan_network_and_resource(rel_path: str, text: str) -> list[SecurityFinding]:
     findings: list[SecurityFinding] = []
-    if match := re.search(r"(169\.254\.169\.254|metadata\.google\.internal)", text):
+    if match := re.search(r"(169\.254\.169\.254|metadata\.google\.internal)", text, re.IGNORECASE):
         findings.append(_finding_from_match("network-cloud-metadata", rel_path, text, match))
     if match := re.search(r":\(\)\{\s*:\|:&\s*\};:", text):
         findings.append(_finding_from_match("resource-fork-bomb", rel_path, text, match))
     for match in _EXTERNAL_HTTP_RE.finditer(text):
-        host = match.group(1)
+        host = _http_host(match.group(0)) or ""
         if host in _LOCAL_HTTP_HOSTS or host.startswith("10.") or host.startswith("192.168.") or re.match(r"172\.(1[6-9]|2\d|3[01])\.", host):
-            findings.append(_finding_from_match("network-local-http", rel_path, text, match))
+            rule_id = "network-local-http"
         else:
-            findings.append(_finding_from_match("network-cleartext-http", rel_path, text, match))
+            rule_id = "network-cleartext-http"
+        finding = _finding_from_match(rule_id, rel_path, text, match)
+        if "@" in match.group(0):
+            finding["evidence"] = "http://" + match.group(0).rsplit("@", 1)[1]
+        findings.append(finding)
         break
     return findings
 
@@ -658,8 +1008,15 @@ def _looks_like_placeholder(value: str) -> bool:
 
 
 def _http_host(url: str) -> str | None:
-    match = re.match(r"https?://\[?([^]/:]+)", url)
-    return match.group(1) if match else None
+    if not url.startswith(("http://", "https://")):
+        return None
+    try:
+        # Parse the authority so IPv6 brackets and userinfo cannot be mistaken
+        # for the host. Malformed URLs remain outbound in _is_outbound_url.
+        host = urlsplit(url).hostname
+    except ValueError:
+        return None
+    return host.lower() if host else None
 
 
 def _is_outbound_url(value: str) -> bool:

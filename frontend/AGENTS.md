@@ -40,6 +40,8 @@ Unit tests live under `tests/unit/` and mirror the `src/` layout (e.g., `tests/u
 
 Webpack is the default development bundler. Use `DEER_FLOW_DEV_BUNDLER=turbo` with `pnpm dev` to opt in to Turbopack when diagnosing a local Next.js bundler issue.
 
+On Windows `pnpm dev` binds `127.0.0.1` by default because Hyper-V/winnat excluded port ranges can reject Next's default `0.0.0.0` bind with `EACCES` (#2870). Pass `pnpm dev -- --hostname 0.0.0.0` to listen on a LAN interface instead.
+
 Rstest runs them as two projects (`rstest.config.ts`). `*.test.ts` / `*.test.tsx` run in a plain **node** environment — that is nearly the whole suite, and it is the default for anything that is pure logic. `*.dom.test.ts` / `*.dom.test.tsx` run in **happy-dom**, for tests that need a document: hooks driven through `renderHook` from `@testing-library/react`, and components. Keep the split — a DOM environment costs roughly 3x the runtime of the node suite, so tests that do not render should not opt into it. A hook whose behavior only exists under real React (effect ordering, cleanup on unmount, re-render on store change) belongs in a `.dom.test.*` file rather than a node test that mocks `react` itself.
 
 E2E tests live under `tests/e2e/` and use Playwright with Chromium. They mock all backend APIs via `page.route()` network interception and test real page interactions (navigation, chat input, streaming responses). Config: `playwright.config.ts`. The real-backend auth contract in `tests/e2e-real-backend/auth-disabled-contract.spec.ts` and `backend/tests/test_auth_me_permissions.py` pin the complete route-permission list; update both when adding registered permissions (including `projects:read/write/delete`).
@@ -51,6 +53,7 @@ Fetch 51 rows to display 50 plus a next-page sentinel; never append pages. Only
 page zero polls or refreshes on focus/reconnect. Task switches reset to page zero,
 and consumed AbortSignals cancel obsolete reads. Live offsets are not snapshots;
 explicit mutations or navigation may observe newly inserted runs.
+Run status `unmet` identifies a finished occurrence whose scheduled goal was not satisfied; keep it distinct from execution failure.
 
 ## Architecture
 
@@ -82,6 +85,16 @@ The frontend is a stateful chat application. Users create **threads** (conversat
 More specific `AGENTS.md` files under `src/` contain the frontend sections split from this file.
 
 ## Code Style
+
+`core/utils/markdown.ts` reads web-fetch titles from the first nonblank line.
+Match zero to three literal spaces before `# ` without trimming indentation;
+mixed space/tab code blocks must fall back to the URL. Strip optional closing
+hashes with a backwards scan so long fetched titles cannot cause quadratic regex
+backtracking. Closing hashes require a preceding space/tab (or an empty title)
+and only ASCII spaces/tabs afterward, apart from the terminal CR in CRLF input.
+Non-ASCII trailing whitespace must not turn literal hashes into closing syntax.
+Keep this local to title extraction rather than changing the shared streamdown
+fence parser.
 
 Custom Agent `display_name` is an optional Unicode UI label, edited in
 `AgentSettingsDialog`. Use it with a fallback to `name` for gallery/chat text;
@@ -182,6 +195,12 @@ lists from the server instead of inserting those snapshots into either view.
 
 CSV/TSV previews share `artifact-table-preview.tsx` between the panel and standalone viewer. Papa Parse runs only inside `delimited-preview.worker.ts`; `use-delimited-preview.ts` bounds input before transfer, cancels stale work, and enforces a five-second timeout. The parser detects the first record separator outside quoted fields and passes it explicitly to Papa Parse, so embedded newlines in an incomplete quoted field cannot corrupt newline detection. It retains at most 202 logical records and 50 columns, discarding an incomplete final record from truncated input. UI pagination displays at most 200 data rows in pages of 50. Keep the table mounted but inactive when switching to source so header/pagination state survives; changing file identity resets it. Pending `write_file` content stays in source mode until success.
 
+For a truncated sample whose first separator is LF or CRLF, strip a terminal CR
+before parsing so a split CRLF separator cannot make a quoted final field
+invalidate the whole preview, including LF-first files with later CRLF records.
+The terminal record remains incomplete and is discarded; complete CR-only files
+and malformed quotes retain their existing behavior.
+
 Custom skill export is admin-only and disabled in static demos. The lazy
 `skill-export-dialog.tsx` must abort requests and ignore stale callbacks on close
 or user/skill changes. `core/skills/export.ts` owns the revision-bound Blob download;
@@ -247,3 +266,76 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+### Shared model settings
+
+Settings → Models (`?settings=models`) offers administrator-only catalog management
+through `/api/managed-models`. YAML entries are read-only. `core/models/management.ts`
+whitelists editable fields so source metadata and `has_api_key` never get posted.
+Draft credentials stay in editor state, never query cache or browser storage; blank
+keeps the saved key, explicit removal sends an empty key. Saving invalidates both the
+admin catalog and `MODELS_QUERY_KEY`. Editor unmount aborts probes and fences late
+callbacks. Static demos and non-admin users must not query the management API.
+
+### Model reasoning capabilities
+
+`/api/models` projects a per-model `reasoning` contract (issue #5073) beside the
+deprecated `supports_thinking` / `supports_reasoning_effort` booleans.
+`core/models/reasoning.ts` is the only place that interprets it: it falls back to
+the booleans for older Gateways, clamps the chat mode (`getResolvedMode` never
+yields `flash` for a required-thinking model), lists the effort options the
+composer and the sidecar render, and maps mode presets and remembered values
+through the contract's aliases/default (`resolveReasoningEffort`). Effort values
+are open strings (`ReasoningEffortValue`), so provider-specific tokens such as
+`max` flow through local settings and account preferences unchanged; the custom
+agent dialog offers only the intersection with the per-agent `low/medium/high`
+schema and hides "off" for required-thinking models. Do not read the booleans in
+components directly. On a legacy model, `resolveReasoningEffort` keeps only its
+advertised generic values; this drops a remembered provider-specific token after
+a model switch without changing the backend's direct legacy-request behavior.
+
+## Full-stack plugin UI
+
+`core/extensions/` loads authenticated deployment-installed ES modules from `/api/plugins`.
+Inline modules use authenticated fetch plus a released Blob URL. Manifest assets use
+native credentialed module scripts, preserving relative imports and resource URLs.
+Both honor the backend base and prefixes; transport and cache semantics are documented in
+`docs/full-stack-plugins.md`. Host copy belongs in the typed locale dictionaries.
+Conversation action factories, shapes and availability callbacks are guarded per plugin;
+only validated value snapshots reach the toolbar/sidebar render paths.
+`PluginNavigation` and the dynamic workspace extension route consume page declarations;
+Capability Center defaults to the repository examples in `core/extensions/catalog.ts`,
+merged by explicit namespace with runtime descriptors. Catalog-only entries are discovery
+metadata, never module-loader inputs or proof of installation. Backend-only examples may
+have no plugin descriptor; keep their runtime status unasserted. Details link to package
+installation instructions. Keep the catalog aligned with `examples/deerflow-extension-*`.
+Agent teams uses `community.agent-teams`; merge its installed descriptor into the
+localized catalog entry without asserting runtime status for a catalog-only row.
+Conversation action slots augment normal/custom-agent toolbars and sidebar menus without replacing native export or notification.
+Plugin views use mount/dispose and abort signals; Shadow DOM is CSS isolation, not a sandbox.
+Descriptors are user-keyed page snapshots, refreshed manually. Backend calls bind the plugin's
+namespace, action allowlist and expected viewer identity. See `docs/full-stack-plugins.md`.
+
+Plugin page `openConversation(threadId)` resolves authenticated thread metadata
+with `pathOfThread`; do not let plugins hardcode default-agent routes. The page's
+abort signal fences late navigation after unmount/account changes. Synchronous
+conversation-action callbacks reject Promise returns while consuming rejections.
+
+### Composer references
+
+`components/workspace/mentions/` owns cursor-local `@` detection, the picker,
+and atomic references. Render labels as DOM text, never HTML; canonical tokens
+preserve draft positions. Submission expands tokens to `@label` and sends up to
+16 unique skill IDs in `additional_kwargs.skill_references`; the backend checks
+each against the user registry and agent allowlist. The web slash picker lists
+only `/goal` and `/compact`; skill selection uses `@`. Legacy typed slash text
+continues through normal message submission for backend and channel compatibility.
+Project files require confirmed `additional_kwargs.files`. Conversation context
+is reconciled from tokens against the current capability and limit. Only successful
+discovery may flatten references; pending/errors preserve IDs and block reference
+sends, with retry on failure. Polish restores whole labels longest-first in one
+pass. Confirmed thread creation seeds metadata before migration; references stay
+locked during attachment. Deleting an object removes its context; undo restores
+references already attached to the draft. Labels grant no read authority. IME,
+caret, thread changes and attachment fences apply to editor and picker. The `@`
+and attachment buttons share the picker.

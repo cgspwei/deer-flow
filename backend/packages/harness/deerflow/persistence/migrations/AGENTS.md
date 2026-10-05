@@ -24,10 +24,14 @@ The empty-DB path keeps using `create_all` because `Base.metadata` is the only a
 `0020_threads_meta_project_id` → `0021_batch_acceptance` →
 `0019_thread_incarnations` → `0022_scheduled_occurrence_seq` →
 `0023_run_change_seq` → `0023_user_preferences` →
-`0024_project_documents` → `0025_repair_run_change_seq` (current head). The preference
+`0024_project_documents` → `0025_repair_run_change_seq` →
+`0026_mcp_task_lease_tokens` → `0027_notification_deliveries` →
+`0028_parked_attempts` → `0029_scheduler_agent_tasks` →
+`0030_notification_claim_tokens` (current head). The preference
 revision adds a separate owner/key table with a cascading users foreign key and
 does not alter users; the project-documents revision adds a new owner-scoped
-shelf table, so the bootstrap forward-compat floor is unchanged.
+shelf table, and the MCP lease-token revision adds two nullable token columns to
+`mcp_tasks`, so the bootstrap forward-compat floor is unchanged.
 The incarnation revision deliberately retains the exact id audited by the
 rollback-floor binary; Alembic orders revisions by `down_revision`, not by the
 numeric prefix.
@@ -82,7 +86,7 @@ the extra nullable columns and their data remain intact. A regression exercises
 that procedure from the original schema and verifies repository reads/inserts
 and preservation of incarnation data.
 
-**Concurrency safety**: Postgres uses `pg_advisory_lock` to serialise concurrent Gateway instances. SQLite uses a per-engine `asyncio.Lock` for same-process startup and is best-effort across processes via SQLite's file-level write lock + `PRAGMA busy_timeout`; multi-instance deployments should use Postgres. Column revisions in `versions/` additionally use idempotent helpers (`_helpers.py::safe_add_column`, `safe_drop_column`) so repeated post-baseline changes and retries are no-ops when the change is already present.
+**Concurrency safety**: Postgres serialises concurrent Gateway instances with a session-level advisory lock, acquired by polling `pg_try_advisory_lock` so the app engine's `command_timeout` never cuts the wait short. SQLite uses a per-engine `asyncio.Lock` for same-process startup and is best-effort across processes via SQLite's file-level write lock + `PRAGMA busy_timeout`; multi-instance deployments should use Postgres. Column revisions in `versions/` additionally use idempotent helpers (`_helpers.py::safe_add_column`, `safe_drop_column`) so repeated post-baseline changes and retries are no-ops when the change is already present.
 
 **Authoring a new revision**:
 ```bash
@@ -152,7 +156,7 @@ on installs that never enabled it. The convention is:
 - `migrations/versions/0014_managed_subagents.py` — creates the deployment-level managed Subagent catalog table
 - `migrations/versions/0015_scheduled_task_enqueue.py` — interrupts legacy transient queued rows, adds durable scheduled-run launch leases and attempt counts, expands the one-active-occurrence index to `queued`/`launching`/`running`, and migrates the overlap policy from `skip` to `enqueue`; chains after `0014_managed_subagents`
 - `migrations/versions/0016_subagent_batches.py` — creates durable native-subagent batch and item tables, including owner/submission idempotency, item identity, lease/recovery state, and result fields
-- `migrations/versions/0017_personal_access_tokens.py` — creates the personal access token table for programmatic API access
+- `migrations/versions/0017_personal_access_tokens.py` — creates the personal access token table for programmatic API access; chains after `0016_subagent_batches`
 - `migrations/versions/0018_oauth_identity_pg_partial.py` — converts `idx_users_oauth_identity` to a partial index on Postgres (`postgresql_where`), matching what `UserRow.__table_args__` already builds via `create_all`; `0001_baseline` never applied the predicate on Postgres, so every `alembic upgrade head`-provisioned deployment carried a full index until this revision. Postgres-only, idempotent (checks `pg_index.indpred` directly), no-op on SQLite (already partial via `sqlite_where`) and on a DB where the index doesn't exist yet. Originally generated as 0017 and renumbered to 0018 after 0017_personal_access_tokens merged first and kept that slot
 - `migrations/versions/0019_projects.py` — creates the `projects` table (id/user_id/name/instructions/presentation/status + timestamps) for the Projects Phase-1 organization feature; chains after `0018_oauth_identity_pg_partial`
 - `migrations/versions/0020_threads_meta_project_id.py` — adds nullable `threads_meta.project_id` plus `ix_threads_meta_project_id` (no FK by design: project delete clears membership first, and the reserved `deerflow_project_id` metadata key stays in sync); chains after `0019_projects`
@@ -162,6 +166,9 @@ on installs that never enabled it. The convention is:
 - `migrations/versions/0023_run_change_seq.py` — adds `runs.change_seq`, its global singleton allocation clock, and owner-aware cursor indexes. Legacy rows remain at zero and page by run id; lifecycle, cancellation, and model-name mutations allocate monotonically increasing positions in their own transaction. Atomic replacement uses one position for every affected row. Progress snapshots and lease heartbeats do not advance the clock. `0023_user_preferences` follows this revision. Its migration test verifies membership in the single-head chain and the expected predecessor rather than pinning the latest head, so later migrations can extend the chain.
 - `migrations/versions/0024_project_documents.py` — creates the `project_documents` shelf table (id/project_id/user_id/name/stored_relpath/sha256/size_bytes, nullable promotion provenance and trash fields, timestamps) with indexes on project_id, user_id, sha256 and trashed_at; no DB-level foreign key on project_id by design (project delete trashes the shelf inside its own transaction). New table, so the bootstrap forward-compat floor is unchanged; chains after `0023_user_preferences` (renumbered from 0023 after the rebase)
 - `migrations/versions/0025_repair_run_change_seq.py` — heals databases that skipped `0023_run_change_seq` because it was inserted ahead of the already-shipped `0023_user_preferences` (#5516): re-applies the guarded `run_change_clock` table, `runs.change_seq` column, and cursor indexes on upgrade; no-ops on healthy shapes; chains after `0024_project_documents`. Its downgrade is intentionally a no-op: the repaired objects belong to ancestor `0023_run_change_seq`, remain required at 0024, and must retain their existing change positions. Only the original 0023 downgrade removes them. `tests/test_run_change_repair_history.py` reconstructs both pre-insertion published descendants and verifies historical upgrade, unchanged healthy positions, and usable run-store writes after downgrade and re-upgrade
+- `migrations/versions/0026_mcp_task_lease_tokens.py` — chains after `0025_repair_run_change_seq` and adds nullable `mcp_tasks.lease_token` / `notification_lease_token` columns so every poll, cancel, and notification mutation can be fenced to the exact claim generation
+- `migrations/versions/0027_notification_deliveries.py` — creates the scheduled-task IM notification outbox (`notification_deliveries`) with idempotency on `(task_run_id, event, provider, target)`; chains after `0026_mcp_task_lease_tokens`. Consumed by `ScheduledTaskService` enqueue + `NotificationDeliveryWorker` (issue #4254); no HTTP read surface yet
+- `migrations/versions/0028_parked_attempts.py` — adds `notification_deliveries.parked_attempts` so channel-down parking is capped; backfills with a temporary `server_default="0"` then drops it so the durable schema matches `create_all` (ORM Python-side `default=0` only). Chains after `0027_notification_deliveries`
 - `persistence/bootstrap.py` — `bootstrap_schema(engine, backend=...)`, the three-branch provisioning decision, locked revision validation, and the narrow 0019 forward-compatibility exception
 - `extensions/loader.py::load_extensions` — registers each spec's `table_prefix` with `register_extension_table_prefix()`
 - Tests: `tests/test_persistence_bootstrap.py` (branches), `tests/test_persistence_bootstrap_concurrency.py` (concurrency), `tests/test_persistence_bootstrap_regression.py` (issue #3682), `tests/test_persistence_migrations_env.py` (filter, including extension-owned tables), `tests/test_extension_loader.py::TestTablePrefixRegistration` (spec-to-filter wiring), `tests/blocking_io/test_persistence_bootstrap.py` (asyncio.to_thread anchor), `tests/test_migration_0004_run_ownership_dedupe.py` + `tests/test_migration_0007_scheduled_run_active_dedupe.py` (dedupe-before-unique-index pre-steps), `tests/test_migration_0025_repair_run_change_seq.py` (issue #5516 skipped-revision heal)

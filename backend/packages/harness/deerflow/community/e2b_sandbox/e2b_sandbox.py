@@ -14,7 +14,7 @@ from deerflow.config.paths import VIRTUAL_PATH_PREFIX
 from deerflow.sandbox.remote_list_dir import parse_remote_list_dir_output, remote_list_dir_command
 from deerflow.sandbox.remote_search import parse_remote_search_output, remote_search_command
 from deerflow.sandbox.sandbox import Sandbox, _validate_extra_env
-from deerflow.sandbox.search import GrepMatch, path_matches, should_ignore_path, truncate_line
+from deerflow.sandbox.search import GrepMatch, path_matches, should_ignore_path_under_root, truncate_line
 
 if TYPE_CHECKING:
     from deerflow.community.e2b_sandbox.e2b_sandbox_provider import MountUploadResult
@@ -234,8 +234,10 @@ class E2BSandbox(Sandbox):
                 return content.decode("utf-8", errors="replace") if isinstance(content, bytes) else content or ""
             text = content.decode("utf-8", errors="replace") if isinstance(content, bytes) else content or ""
             lines = text.splitlines()
-            start = start_line or 1
-            end = end_line if end_line is not None else len(lines)
+            # Clamp like LocalSandbox.read_file: a negative start would otherwise
+            # wrap around through Python's negative-index slicing.
+            start = max(start_line or 1, 1)
+            end = max(end_line, 0) if end_line is not None else len(lines)
             content = "\n".join(lines[start - 1 : end])
             return content
         except Exception as e:
@@ -431,15 +433,19 @@ class E2BSandbox(Sandbox):
                 continue
             if entry != root and not entry.startswith(root_prefix):
                 continue
-            if should_ignore_path(entry):
+            if should_ignore_path_under_root(entry, root):
                 continue
             rel_path = entry[len(root) :].lstrip("/")
             if not rel_path:
                 continue
             if path_matches(pattern, rel_path):
                 matches.append(entry)
-                if len(matches) >= max_results:
-                    return matches, True
+                # Look one match past the cap before deciding: returning on the
+                # max-th match cannot tell a search that held exactly
+                # ``max_results`` from one that held more, so an exhausted tree
+                # was reported as truncated.
+                if len(matches) > max_results:
+                    return matches[:max_results], True
         return matches, output.truncated
 
     def grep(
@@ -477,7 +483,7 @@ class E2BSandbox(Sandbox):
             include_pattern = glob.split("/")[-1] or glob
             flags.append(f"--include={include_pattern}")
 
-        per_file_cap = max(max_results, 50)
+        per_file_cap = max(max_results + 1, 50)
         total_cap = max(max_results * 4, max_results + 50)
         flags.append(f"-m{per_file_cap}")
 
@@ -509,7 +515,7 @@ class E2BSandbox(Sandbox):
                 line_number = int(line_no_str)
             except ValueError:
                 continue
-            if should_ignore_path(file_path):
+            if should_ignore_path_under_root(file_path, root):
                 continue
             if glob is not None:
                 # Restrict to the caller's real directory scope -- the
@@ -526,7 +532,7 @@ class E2BSandbox(Sandbox):
                     line=truncate_line(line_text),
                 )
             )
-            if len(matches) >= max_results:
-                truncated = True
-                break
+            # Same one-match-past-the-cap rule as glob() above.
+            if len(matches) > max_results:
+                return matches[:max_results], True
         return matches, truncated

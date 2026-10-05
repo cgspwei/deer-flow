@@ -5,6 +5,7 @@ Equivalent to the original RunManager._runs dict behavior.
 
 from __future__ import annotations
 
+import copy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -13,6 +14,7 @@ from deerflow.runtime.runs.store.base import (
     RunIdempotencyConflict,
     RunStore,
     StatusFinalization,
+    canonical_run_created_at,
     run_is_before_cursor,
     run_sort_key,
 )
@@ -40,9 +42,12 @@ class MemoryRunStore(RunStore):
             if not bucket:
                 self._runs_by_thread.pop(thread_id, None)
 
-    def _mark_changed(self, run: dict[str, Any]) -> None:
+    def _next_change_seq(self) -> int:
         self._change_seq += 1
-        run["change_seq"] = self._change_seq
+        return self._change_seq
+
+    def _mark_changed(self, run: dict[str, Any]) -> None:
+        run["change_seq"] = self._next_change_seq()
 
     async def put(
         self,
@@ -59,6 +64,7 @@ class MemoryRunStore(RunStore):
         kwargs=None,
         error=None,
         stop_reason=None,
+        goal_verdict=None,
         created_at=None,
         owner_worker_id=None,
         lease_expires_at=None,
@@ -79,6 +85,7 @@ class MemoryRunStore(RunStore):
             "kwargs": kwargs or {},
             "error": error,
             "stop_reason": stop_reason,
+            "goal_verdict": copy.deepcopy(goal_verdict),
             "created_at": created_at or now,
             "updated_at": now,
             "owner_worker_id": owner_worker_id,
@@ -144,6 +151,20 @@ class MemoryRunStore(RunStore):
         results.sort(key=lambda r: run_sort_key(r.get("created_at"), r["run_id"]), reverse=True)
         return results[:limit]
 
+    async def list_by_thread_created_at(self, thread_id, *, user_id, created_at):
+        target = canonical_run_created_at(created_at)
+        matches = []
+        for run_id in self._runs_by_thread.get(thread_id, ()):
+            row = self._runs[run_id]
+            if row.get("user_id") != user_id:
+                continue
+            try:
+                if canonical_run_created_at(row["created_at"]) == target:
+                    matches.append(row)
+            except (TypeError, ValueError):
+                continue
+        return matches
+
     async def list_successful_regenerate_sources(self, thread_id, *, user_id=None):
         run_ids = self._runs_by_thread.get(thread_id) or ()
         sources: set[str] = set()
@@ -178,7 +199,7 @@ class MemoryRunStore(RunStore):
         thread_run_ids = self._runs_by_thread.get(thread_id) or ()
         return {run_id: run for run_id in thread_run_ids if run_id in run_ids and (run := self._runs.get(run_id)) is not None and run.get("operation_kind", "run") == "run" and (user_id is None or run.get("user_id") == user_id)}
 
-    async def update_status(self, run_id, status, *, error=None, stop_reason=None):
+    async def update_status(self, run_id, status, *, error=None, stop_reason=None, goal_verdict=None):
         run = self._runs.get(run_id)
         if run is None:
             return False
@@ -191,6 +212,8 @@ class MemoryRunStore(RunStore):
             run["error"] = error
         if stop_reason is not None:
             run["stop_reason"] = stop_reason
+        if goal_verdict is not None:
+            run["goal_verdict"] = copy.deepcopy(goal_verdict)
         run["updated_at"] = datetime.now(UTC).isoformat()
         self._mark_changed(run)
         return True
@@ -247,7 +270,7 @@ class MemoryRunStore(RunStore):
         run["status"] = status
         for key, value in kwargs.items():
             if value is not None:
-                run[key] = value
+                run[key] = copy.deepcopy(value) if key == "goal_verdict" else value
         run["updated_at"] = datetime.now(UTC).isoformat()
         self._mark_changed(run)
         return True
@@ -372,6 +395,7 @@ class MemoryRunStore(RunStore):
         status: str,
         error: str | None = None,
         stop_reason: str | None = None,
+        goal_verdict: dict[str, Any] | None = None,
     ) -> StatusFinalization:
         run = self._runs.get(run_id)
         if run is None:
@@ -388,6 +412,8 @@ class MemoryRunStore(RunStore):
             run["error"] = error
         if stop_reason is not None:
             run["stop_reason"] = stop_reason
+        if goal_verdict is not None:
+            run["goal_verdict"] = copy.deepcopy(goal_verdict)
         run["updated_at"] = datetime.now(UTC).isoformat()
         self._mark_changed(run)
         return StatusFinalization(finalized=True)
@@ -502,6 +528,7 @@ class MemoryRunStore(RunStore):
         # interrupted state on raise, diverging from SQL where a raise rolls
         # the whole transaction back.
         claimed = []
+        change_seq: int | None = None
         if multitask_strategy in ("interrupt", "rollback"):
             candidates: list[dict[str, Any]] = []
             for r in self._runs.values():
@@ -533,12 +560,20 @@ class MemoryRunStore(RunStore):
                 if r.get("operation_kind", "run") != "run" and not lease_expired:
                     raise ConflictError(f"Thread {thread_id} has an active checkpoint write")
                 candidates.append(r)
+            # One position covers this atomic set of changes, with ``run_id``
+            # ordering ties. The SQL store allocates the same single value for
+            # the set from its singleton clock (``runtime/AGENTS.md``); marking
+            # each row separately split one interrupt-and-replace into two
+            # positions in the ``(change_seq, run_id)`` cursor consumers page
+            # with. Allocate after the raise-only scan above so a rejected
+            # operation does not consume a position.
+            change_seq = self._next_change_seq()
             for r in candidates:
                 r["status"] = "interrupted"
                 r["error"] = "Cancelled by newer run"
                 r["owner_worker_id"] = owner_worker_id
                 r["updated_at"] = now
-                self._mark_changed(r)
+                r["change_seq"] = change_seq
                 claimed.append(r)
 
         new_row = {
@@ -561,7 +596,9 @@ class MemoryRunStore(RunStore):
             "created_at": created_at or now,
             "updated_at": now,
         }
+        if change_seq is None:
+            change_seq = self._next_change_seq()
+        new_row["change_seq"] = change_seq
         self._runs[run_id] = new_row
-        self._mark_changed(new_row)
         self._index_run(run_id, thread_id)
         return new_row, claimed
